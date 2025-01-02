@@ -21,7 +21,7 @@ static constexpr double SQUARE_SIDE_LENGTH{ 172.5 / 11 }; // 172.5 mm per 11 squ
 static constexpr int INPUT_VIDEO_FRAME_WIDTH{ 1280 };
 static constexpr int INPUT_VIDEO_FRAME_HEIGHT{ 720 };
 static constexpr int TOTAL_SECONDS_PATTERN_HOLD{ 3 }; // total seconds the user must hold the pattern in place until a snapshot is taken and detected corners stored
-static constexpr double MIN_PATTERN_HOLD_IOU{ 0.99 };
+static constexpr double MIN_PATTERN_HOLD_IOU{ 0.96 };
 
 // Remember that Fast Check erroneously fails with high distortions like fisheye.
 static constexpr int chessboard_flags = cv::CALIB_CB_ADAPTIVE_THRESH
@@ -48,6 +48,7 @@ long long time_delta_ms(std::chrono::steady_clock::time_point start)
 
 static void main_loop()
 {
+    using namespace pinhole_camera_calibration;
     using namespace std;
     using namespace cv;
 
@@ -57,7 +58,7 @@ static void main_loop()
     cv::namedWindow(INPUT_IMAGE_WINDOW_TITLE, cv::WINDOW_KEEPRATIO);
 
     VideoCapture cap{ 0 };
-    Mat frame_bgr, frame_bgr_flipped, frame_gray;
+    Mat frame_bgr, frame_gray;
 
     cap.set(CAP_PROP_FRAME_WIDTH, INPUT_VIDEO_FRAME_WIDTH);
     cap.set(CAP_PROP_FRAME_HEIGHT, INPUT_VIDEO_FRAME_HEIGHT);
@@ -73,12 +74,20 @@ static void main_loop()
     int frame_count_with_pattern_held = 0; // total frames the user has held the pattern in same pose for; resets to 0 when pattern is moved
     bool pattern_is_being_held = false;
 
+    camera_calibration this_calibration;
+
     while (true)
     {
         cap >> frame_bgr;
         corners.clear();
         corners_iou = -1;
         pattern_is_being_held = false;
+
+        cv::Mat presentation_frame = frame_bgr.clone();
+        this_calibration.paint_calibration_footprint(presentation_frame);
+
+        // Mirror the webcam feed horizontally as it makes it easier to move the pattern around.
+        cv::flip(presentation_frame, presentation_frame, 1);
 
         if (frame_bgr.size() != cv::Size(INPUT_VIDEO_FRAME_WIDTH, INPUT_VIDEO_FRAME_HEIGHT))
         {
@@ -89,9 +98,6 @@ static void main_loop()
         {
             throw std::runtime_error("Empty video frame");
         }
-
-        // Mirror the webcam feed horizontally as it makes it easier to move the pattern around.
-        cv::flip(frame_bgr, frame_bgr_flipped, 1);
 
         bool found = findChessboardCorners(frame_bgr, CHESSBOARD_SIZE,
             corners, chessboard_flags);
@@ -106,7 +112,7 @@ static void main_loop()
                     30, 0.0001));
 
             flipped_corners = calibration_tools::flip_horiontally(frame_bgr.cols, corners);
-            drawChessboardCorners(frame_bgr_flipped, CHESSBOARD_SIZE, flipped_corners, found);
+            drawChessboardCorners(presentation_frame, CHESSBOARD_SIZE, flipped_corners, found);
 
             corners_iou = calibration_tools::constellation_IoU(corners, previous_corners);
             pattern_is_being_held = (corners_iou > MIN_PATTERN_HOLD_IOU);
@@ -123,22 +129,27 @@ static void main_loop()
         }
 
         total_seconds_held = double(time_delta_ms(frame_new_pose_start_time) / 1000.0);
-        
+
+        if (total_seconds_held > TOTAL_SECONDS_PATTERN_HOLD)
+        {
+            this_calibration.add_constellation(corners);
+        }
         
         // Create a string stream
         std::ostringstream oss;
+        oss << std::fixed << std::setprecision(3) << std::setw(6) << std::setfill('0');
 
         // Set fixed-point format, precision, and width with leading zeros
-        oss << "Corners IoU: " << std::fixed << std::setprecision(3) << std::setw(6) << std::setfill('0') << corners_iou;
-        cv::putText(frame_bgr_flipped, oss.str(), { 100, 100 }, cv::FONT_HERSHEY_COMPLEX_SMALL, 1.0, { 255, 225, 0 });
+        //oss << "Corners IoU: "  << corners_iou;
+        //cv::putText(frame_bgr_flipped, oss.str(), { 100, 100 }, cv::FONT_HERSHEY_COMPLEX_SMALL, 1.0, { 255, 225, 0 });
         
         oss.str("");       // Clear the buffer
         oss.clear();       // Reset stream state
         oss << "Total frames -- seconds with pattern held: " << frame_count_with_pattern_held << " -- " << total_seconds_held;
-        cv::putText(frame_bgr_flipped, oss.str(), { 100, 150 }, cv::FONT_HERSHEY_COMPLEX_SMALL, 1.0, { 255, 225, 0 });
+        cv::putText(presentation_frame, oss.str(), { 100, 150 }, cv::FONT_HERSHEY_COMPLEX_SMALL, 1.0, { 255, 225, 0 });
 
 
-        cv::imshow(INPUT_IMAGE_WINDOW_TITLE, frame_bgr_flipped);
+        cv::imshow(INPUT_IMAGE_WINDOW_TITLE, presentation_frame);
         int pressed_key = cv::waitKey(1);
 
         if (pressed_key == ESCAPE_KEY)

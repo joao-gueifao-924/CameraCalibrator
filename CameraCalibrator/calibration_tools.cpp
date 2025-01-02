@@ -1,9 +1,14 @@
 #include "calibration_tools.h"
 #include <opencv2/imgproc.hpp>
+#include <random>
 
-std::vector<cv::Point2f> calibration_tools::flip_horiontally(int image_width, std::vector<cv::Point2f> points)
+using namespace pinhole_camera_calibration;
+
+double CONSTELLATION_IOU_THRESHOLD{ 0.5 };
+
+PointConstellation calibration_tools::flip_horiontally(int image_width, const PointConstellation& points)
 {
-    std::vector<cv::Point2f> output;
+	PointConstellation output;
 	output.reserve(points.size());
 
 	for (size_t i = 0; i < points.size(); i++)
@@ -17,27 +22,104 @@ std::vector<cv::Point2f> calibration_tools::flip_horiontally(int image_width, st
 	return output;
 }
 
-double calibration_tools::constellation_IoU(const std::vector<cv::Point2f>& constellation_a, const std::vector<cv::Point2f>& constellation_b)
+double calibration_tools::constellation_IoU(const PointConstellation& constellation_a, const PointConstellation& constellation_b)
 {
 	if (constellation_a.size() < 4 || constellation_b.size() < 4)
 	{
 		return 0.0;
 	}
 
-	std::vector<cv::Point2f> hull1, hull2;
-	cv::convexHull(constellation_a, hull1);
-	cv::convexHull(constellation_b, hull2);
+	PointConstellation hull_a, hull_b;
+	cv::convexHull(constellation_a, hull_a);
+	cv::convexHull(constellation_b, hull_b);
 
-	// Compare hull properties (e.g., area)
-	double areaHull1 = cv::contourArea(hull1);
-	double areaHull2 = cv::contourArea(hull2);
-	
+	return convex_polygons_IoU(hull_a, hull_b);
+}
+
+double pinhole_camera_calibration::calibration_tools::convex_polygons_IoU(const PointConstellation& polygon_a, const PointConstellation& polygon_b)
+{
+	if (polygon_a.size() < 4 || polygon_b.size() < 4)
+	{
+		return 0.0;
+	}
+
+	double area_a = cv::contourArea(polygon_a);
+	double area_b = cv::contourArea(polygon_b);
+
 	// Compute intersection polygon
-	std::vector<cv::Point2f> intersectionPolygon;
-	float intersectionArea = cv::intersectConvexConvex(hull1, hull2, intersectionPolygon);
+	PointConstellation intersection_polygon;
+	float intersection_area = cv::intersectConvexConvex(polygon_a, polygon_b, intersection_polygon);
 
 	// Compute Intersection over Union
-	double unionArea = areaHull1 + areaHull2 - intersectionArea;
-	double iou = (unionArea > 0) ? (intersectionArea / unionArea) : 0.0;
+	double union_area = area_a + area_b - intersection_area;
+	double iou = (union_area > 0) ? (intersection_area / union_area) : 0.0;
 	return iou;
+}
+
+pinhole_camera_calibration::camera_calibration::camera_calibration(int total_colors)
+{
+	generate_colormap_(total_colors);
+}
+
+void pinhole_camera_calibration::camera_calibration::add_constellation(const PointConstellation& constellation)
+{
+	typedef calibration_tools ct;
+
+	PointConstellation hull;
+	cv::convexHull(constellation, hull);
+
+	bool should_add_new_constellation = false;
+
+	for (size_t i = 0; i < constellations_and_hulls_.size(); i++)
+	{
+		double iou = ct::convex_polygons_IoU(hull, constellations_and_hulls_[i].second);
+
+		if (iou > CONSTELLATION_IOU_THRESHOLD)
+		{
+			return; // abort, a similar constellation was found
+		}
+	}
+
+	constellations_and_hulls_.push_back({ constellation, hull });
+}
+
+void pinhole_camera_calibration::camera_calibration::paint_calibration_footprint(cv::Mat image_bgr)
+{
+	std::mt19937 gen(42); // Fixed seed for reproducibility
+	std::uniform_int_distribution<int> dist(0, colormap_.size()-1); // Range [0, total_colors-1]
+
+	for (size_t i = 0; i < constellations_and_hulls_.size(); i++)
+	{
+		// pick random color from colormap
+		int random_idx = dist(gen); // Generate a random index
+		cv::Vec3b random_color = colormap_.at(random_idx);
+
+		const PointConstellation& hull = constellations_and_hulls_[i].second;
+		std::vector<cv::Point2i> hull_integers;
+		hull_integers.reserve(hull.size());
+
+		for (size_t j = 0; j < hull.size(); j++)
+		{
+			hull_integers.push_back(cv::Point2i{hull[j]});
+		}
+
+		cv::fillConvexPoly(image_bgr, hull_integers, random_color);
+	}
+}
+
+void pinhole_camera_calibration::camera_calibration::generate_colormap_(int total_colors)
+{
+	cv::Mat grayscale(1, 256, CV_8UC1); // Grayscale image
+	for (int i = 0; i < 256; ++i)
+		grayscale.at<uchar>(0, i) = i;
+
+	cv::Mat colormap;
+	cv::applyColorMap(grayscale, colormap, cv::COLORMAP_JET);
+
+	// Extract distinct colors from the colormap
+	for (int i = 0; i < colormap.cols; i += colormap.cols / total_colors)
+	{
+		cv::Vec3b color = colormap.at<cv::Vec3b>(0, i);
+		colormap_.push_back(color);
+	}
 }
