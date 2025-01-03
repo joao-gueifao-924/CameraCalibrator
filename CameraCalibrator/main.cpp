@@ -17,12 +17,13 @@
 static std::string INPUT_IMAGE_WINDOW_TITLE{ "Input image & Detections" };
 static const cv::Size WINDOW_SEARCH_SIZE{ 11, 11 };
 static const cv::Size CHESSBOARD_SIZE{ 10,7 };
-static constexpr double SQUARE_SIDE_LENGTH{ 172.5 / 11 }; // 172.5 mm per 11 squares
+static constexpr double SQUARE_SIDE_LENGTH_mm{ 172.5 / 11 }; // 172.5 mm per 11 squares
 static constexpr int INPUT_VIDEO_FRAME_WIDTH{ 1280 };
 static constexpr int INPUT_VIDEO_FRAME_HEIGHT{ 720 };
 static constexpr int MIN_SECONDS_HOLD_TO_CHECK_SIMILARITY{ 1 }; // total seconds the user must hold the pattern in place until a check for similarity of pattern pose store is made and feedback message is shown
 static constexpr int MIN_SECONDS_HOLD_TO_ADD{ 3 }; // total seconds the user must hold the pattern in place until a snapshot is taken and detected corners stored
 static constexpr double MIN_PATTERN_HOLD_IOU{ 0.90 };
+static constexpr int MIN_CALIBRATION_CONSTELLATIONS{ 10 };
 
 // Remember that Fast Check erroneously fails with high distortions like fisheye.
 static constexpr int chessboard_flags = cv::CALIB_CB_ADAPTIVE_THRESH
@@ -71,7 +72,7 @@ static void main_loop()
 
     bool pattern_is_being_held = false;
 
-    camera_calibration this_calibration;
+    camera_calibration this_calibration(SQUARE_SIDE_LENGTH_mm, CHESSBOARD_SIZE, { INPUT_VIDEO_FRAME_WIDTH, INPUT_VIDEO_FRAME_HEIGHT });
 
     while (true)
     {
@@ -145,6 +146,17 @@ static void main_loop()
         oss << "pattern held for: "<< total_seconds_held << " seconds";
         cv::putText(presentation_frame, oss.str(), { 100, 150 }, cv::FONT_HERSHEY_COMPLEX_SMALL, 1.0, { 255, 225, 0 });
 
+
+        
+
+        if (this_calibration.total_constellations() < MIN_CALIBRATION_CONSTELLATIONS)
+        {
+            cv::putText(presentation_frame, "Keep registering more patterns", {100, 50}, cv::FONT_HERSHEY_COMPLEX_SMALL, 1.0, {255, 225, 0});
+        }
+        else
+        {
+            this_calibration.fit_model();
+        }
 
         cv::imshow(INPUT_IMAGE_WINDOW_TITLE, presentation_frame);
         int pressed_key = cv::waitKey(1);

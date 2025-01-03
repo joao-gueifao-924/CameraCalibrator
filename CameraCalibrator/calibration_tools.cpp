@@ -1,14 +1,15 @@
 #include "calibration_tools.h"
 #include <opencv2/imgproc.hpp>
 #include <random>
+#include <opencv2/calib3d.hpp>
 
 using namespace pinhole_camera_calibration;
 
 double CONSTELLATION_IOU_THRESHOLD{ 0.7 };
 
-PointConstellation calibration_tools::flip_horiontally(int image_width, const PointConstellation& points)
+PointConstellation2D calibration_tools::flip_horiontally(int image_width, const PointConstellation2D& points)
 {
-	PointConstellation output;
+	PointConstellation2D output;
 	output.reserve(points.size());
 
 	for (size_t i = 0; i < points.size(); i++)
@@ -22,21 +23,21 @@ PointConstellation calibration_tools::flip_horiontally(int image_width, const Po
 	return output;
 }
 
-double calibration_tools::constellation_IoU(const PointConstellation& constellation_a, const PointConstellation& constellation_b)
+double calibration_tools::constellation_IoU(const PointConstellation2D& constellation_a, const PointConstellation2D& constellation_b)
 {
 	if (constellation_a.size() < 4 || constellation_b.size() < 4)
 	{
 		return 0.0;
 	}
 
-	PointConstellation hull_a, hull_b;
+	PointConstellation2D hull_a, hull_b;
 	cv::convexHull(constellation_a, hull_a);
 	cv::convexHull(constellation_b, hull_b);
 
 	return convex_polygons_IoU(hull_a, hull_b);
 }
 
-double pinhole_camera_calibration::calibration_tools::convex_polygons_IoU(const PointConstellation& polygon_a, const PointConstellation& polygon_b)
+double pinhole_camera_calibration::calibration_tools::convex_polygons_IoU(const PointConstellation2D& polygon_a, const PointConstellation2D& polygon_b)
 {
 	if (polygon_a.size() < 4 || polygon_b.size() < 4)
 	{
@@ -47,7 +48,7 @@ double pinhole_camera_calibration::calibration_tools::convex_polygons_IoU(const 
 	double area_b = cv::contourArea(polygon_b);
 
 	// Compute intersection polygon
-	PointConstellation intersection_polygon;
+	PointConstellation2D intersection_polygon;
 	float intersection_area = cv::intersectConvexConvex(polygon_a, polygon_b, intersection_polygon);
 
 	// Compute Intersection over Union
@@ -56,25 +57,43 @@ double pinhole_camera_calibration::calibration_tools::convex_polygons_IoU(const 
 	return iou;
 }
 
-pinhole_camera_calibration::camera_calibration::camera_calibration(int total_colors)
+PointConstellation3D pinhole_camera_calibration::calibration_tools::generate_chessboard_world_points(float square_side_length_mm, cv::Size pattern_size)
 {
-	generate_colormap_(total_colors);
+	PointConstellation3D output;
+
+	for (int i = 0; i < pattern_size.width; i++)
+	{
+		for (int j = 0; j < pattern_size.height; j++)
+		{
+			output.emplace_back(i * square_side_length_mm, j * square_side_length_mm, 0.0f);
+		}
+	}
+
+	return output;
 }
 
-void pinhole_camera_calibration::camera_calibration::add_constellation(const PointConstellation& constellation)
+pinhole_camera_calibration::camera_calibration::camera_calibration(float square_side_length_mm, cv::Size pattern_size, cv::Size image_size, int total_colors)
+	: image_size_{image_size}
+{
+	typedef calibration_tools ct;
+	generate_colormap_(total_colors);
+	calibration_pattern_world_constellations_ = ct::generate_chessboard_world_points(square_side_length_mm, pattern_size);
+}
+
+void pinhole_camera_calibration::camera_calibration::add_constellation(const PointConstellation2D& constellation)
 {
 	if (!is_different_enough(constellation)) return;
 
-	PointConstellation hull;
+	PointConstellation2D hull;
 	cv::convexHull(constellation, hull);
 	constellations_and_hulls_.push_back({ constellation, hull });
 }
 
-bool pinhole_camera_calibration::camera_calibration::is_different_enough(const PointConstellation& constellation)
+bool pinhole_camera_calibration::camera_calibration::is_different_enough(const PointConstellation2D& constellation)
 {
 	typedef calibration_tools ct;
 
-	PointConstellation hull;
+	PointConstellation2D hull;
 	cv::convexHull(constellation, hull);
 
 	for (size_t i = 0; i < constellations_and_hulls_.size(); i++)
@@ -101,7 +120,7 @@ void pinhole_camera_calibration::camera_calibration::paint_calibration_footprint
 		int random_idx = dist(gen); // Generate a random index
 		cv::Vec3b random_color = colormap_.at(random_idx);
 
-		const PointConstellation& hull = constellations_and_hulls_[i].second;
+		const PointConstellation2D& hull = constellations_and_hulls_[i].second;
 		std::vector<cv::Point2i> hull_integers;
 		hull_integers.reserve(hull.size());
 
@@ -124,6 +143,32 @@ void pinhole_camera_calibration::camera_calibration::paint_calibration_footprint
 		// Blend the overlay with the original image using alpha blending
 		cv::addWeighted(overlay, alpha, image_bgr, 1.0 - alpha, 0.0, image_bgr);
 	}
+}
+
+void pinhole_camera_calibration::camera_calibration::fit_model()
+{
+	// Perform camera calibration
+	cv::Mat cameraMatrix, distCoeffs;
+	std::vector<cv::Mat> rvecs, tvecs;
+	
+	std::vector<PointConstellation2D> image_points;
+	std::vector<PointConstellation3D> object_world_points_copies;
+
+	for (size_t i = 0; i < constellations_and_hulls_.size(); i++)
+	{
+		image_points.push_back(constellations_and_hulls_[i].first); // need to discard the constellation hulls for the cv::calibrateCamera call below
+		object_world_points_copies.push_back(calibration_pattern_world_constellations_); // push several copies
+	}
+
+	double reprojectionError = cv::calibrateCamera(object_world_points_copies, image_points,
+		image_size_, cameraMatrix,
+		distCoeffs, rvecs, tvecs);
+
+	// Print results
+	std::cout << "Camera Matrix:\n" << cameraMatrix << "\n";
+	std::cout << "Distortion Coefficients:\n" << distCoeffs << "\n";
+	std::cout << "Reprojection Error: " << reprojectionError << "\n";
+
 }
 
 void pinhole_camera_calibration::camera_calibration::generate_colormap_(int total_colors)
