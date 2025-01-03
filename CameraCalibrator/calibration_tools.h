@@ -27,8 +27,11 @@ namespace pinhole_camera_calibration
 	public:
 		camera_calibration(int total_colors = 32);
 
-		// only adds constellation to list if distanced enough from all other constellations already stored
+		// only adds constellation to store if is_different_enough(constellation) is true
 		void add_constellation(const PointConstellation& constellation);
+
+		// checks if constellation is different enough from all other constellations already stored
+		bool is_different_enough(const PointConstellation& constellation);
 
 		void paint_calibration_footprint(cv::Mat image_bgr);
 	private:

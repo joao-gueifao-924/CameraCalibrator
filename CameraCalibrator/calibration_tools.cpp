@@ -4,7 +4,7 @@
 
 using namespace pinhole_camera_calibration;
 
-double CONSTELLATION_IOU_THRESHOLD{ 0.5 };
+double CONSTELLATION_IOU_THRESHOLD{ 0.7 };
 
 PointConstellation calibration_tools::flip_horiontally(int image_width, const PointConstellation& points)
 {
@@ -63,12 +63,19 @@ pinhole_camera_calibration::camera_calibration::camera_calibration(int total_col
 
 void pinhole_camera_calibration::camera_calibration::add_constellation(const PointConstellation& constellation)
 {
+	if (!is_different_enough(constellation)) return;
+
+	PointConstellation hull;
+	cv::convexHull(constellation, hull);
+	constellations_and_hulls_.push_back({ constellation, hull });
+}
+
+bool pinhole_camera_calibration::camera_calibration::is_different_enough(const PointConstellation& constellation)
+{
 	typedef calibration_tools ct;
 
 	PointConstellation hull;
 	cv::convexHull(constellation, hull);
-
-	bool should_add_new_constellation = false;
 
 	for (size_t i = 0; i < constellations_and_hulls_.size(); i++)
 	{
@@ -76,11 +83,11 @@ void pinhole_camera_calibration::camera_calibration::add_constellation(const Poi
 
 		if (iou > CONSTELLATION_IOU_THRESHOLD)
 		{
-			return; // abort, a similar constellation was found
+			return false;
 		}
 	}
 
-	constellations_and_hulls_.push_back({ constellation, hull });
+	return true;
 }
 
 void pinhole_camera_calibration::camera_calibration::paint_calibration_footprint(cv::Mat image_bgr)

@@ -20,7 +20,8 @@ static const cv::Size CHESSBOARD_SIZE{ 10,7 };
 static constexpr double SQUARE_SIDE_LENGTH{ 172.5 / 11 }; // 172.5 mm per 11 squares
 static constexpr int INPUT_VIDEO_FRAME_WIDTH{ 1280 };
 static constexpr int INPUT_VIDEO_FRAME_HEIGHT{ 720 };
-static constexpr int TOTAL_SECONDS_PATTERN_HOLD{ 3 }; // total seconds the user must hold the pattern in place until a snapshot is taken and detected corners stored
+static constexpr int MIN_SECONDS_HOLD_TO_CHECK_SIMILARITY{ 1 }; // total seconds the user must hold the pattern in place until a check for similarity of pattern pose store is made and feedback message is shown
+static constexpr int MIN_SECONDS_HOLD_TO_ADD{ 3 }; // total seconds the user must hold the pattern in place until a snapshot is taken and detected corners stored
 static constexpr double MIN_PATTERN_HOLD_IOU{ 0.96 };
 
 // Remember that Fast Check erroneously fails with high distortions like fisheye.
@@ -68,10 +69,6 @@ static void main_loop()
     time_point frame_new_pose_start_time = now_time();
     double total_seconds_held = 0;
 
-    double input_video_fps = cap.get(CAP_PROP_FPS);
-    const int total_frames_pattern_hold = input_video_fps * TOTAL_SECONDS_PATTERN_HOLD;
-
-    int frame_count_with_pattern_held = 0; // total frames the user has held the pattern in same pose for; resets to 0 when pattern is moved
     bool pattern_is_being_held = false;
 
     camera_calibration this_calibration;
@@ -80,7 +77,6 @@ static void main_loop()
     {
         cap >> frame_bgr;
         corners.clear();
-        corners_iou = -1;
         pattern_is_being_held = false;
 
         cv::Mat presentation_frame = frame_bgr.clone();
@@ -118,21 +114,22 @@ static void main_loop()
             pattern_is_being_held = (corners_iou > MIN_PATTERN_HOLD_IOU);
         }
 
-        if (pattern_is_being_held)
+        if (!pattern_is_being_held)
         {
-            frame_count_with_pattern_held++;
-        }
-        else
-        {
-            frame_count_with_pattern_held = 0;
             frame_new_pose_start_time = now_time();
         }
 
         total_seconds_held = double(time_delta_ms(frame_new_pose_start_time) / 1000.0);
 
-        if (total_seconds_held > TOTAL_SECONDS_PATTERN_HOLD)
+        if (total_seconds_held > MIN_SECONDS_HOLD_TO_CHECK_SIMILARITY && !this_calibration.is_different_enough(corners))
+        {
+            cv::putText(presentation_frame, "Hold pattern somewhere else", {100, 20}, cv::FONT_HERSHEY_COMPLEX_SMALL, 1.0, {255, 225, 0});
+        }
+
+        if (total_seconds_held > MIN_SECONDS_HOLD_TO_ADD)
         {
             this_calibration.add_constellation(corners);
+            frame_new_pose_start_time = now_time();
         }
         
         // Create a string stream
@@ -145,7 +142,7 @@ static void main_loop()
         
         oss.str("");       // Clear the buffer
         oss.clear();       // Reset stream state
-        oss << "Total frames -- seconds with pattern held: " << frame_count_with_pattern_held << " -- " << total_seconds_held;
+        oss << "pattern held for: "<< total_seconds_held << " seconds";
         cv::putText(presentation_frame, oss.str(), { 100, 150 }, cv::FONT_HERSHEY_COMPLEX_SMALL, 1.0, { 255, 225, 0 });
 
 
