@@ -110,7 +110,19 @@ void pinhole_camera_calibration::camera_calibration::paint_calibration_footprint
 			hull_integers.push_back(cv::Point2i{hull[j]});
 		}
 
-		cv::fillConvexPoly(image_bgr, hull_integers, random_color);
+		//cv::fillConvexPoly(image_bgr, hull_integers, random_color);
+
+		// Create a temporary overlay image
+		cv::Mat overlay;
+		image_bgr.copyTo(overlay);
+
+		// Draw the polygon on the overlay image
+		cv::fillConvexPoly(overlay, hull_integers, random_color);
+
+		double alpha = 0.5;
+
+		// Blend the overlay with the original image using alpha blending
+		cv::addWeighted(overlay, alpha, image_bgr, 1.0 - alpha, 0.0, image_bgr);
 	}
 }
 
