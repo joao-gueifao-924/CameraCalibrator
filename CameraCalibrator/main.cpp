@@ -22,7 +22,7 @@ static constexpr int INPUT_VIDEO_FRAME_WIDTH{ 1280 };
 static constexpr int INPUT_VIDEO_FRAME_HEIGHT{ 720 };
 static constexpr int MIN_SECONDS_HOLD_TO_CHECK_SIMILARITY{ 1 }; // total seconds the user must hold the pattern in place until a check for similarity of pattern pose store is made and feedback message is shown
 static constexpr int MIN_SECONDS_HOLD_TO_ADD{ 3 }; // total seconds the user must hold the pattern in place until a snapshot is taken and detected corners stored
-static constexpr double MIN_PATTERN_HOLD_IOU{ 0.96 };
+static constexpr double MIN_PATTERN_HOLD_IOU{ 0.90 };
 
 // Remember that Fast Check erroneously fails with high distortions like fisheye.
 static constexpr int chessboard_flags = cv::CALIB_CB_ADAPTIVE_THRESH
@@ -64,7 +64,7 @@ static void main_loop()
     cap.set(CAP_PROP_FRAME_WIDTH, INPUT_VIDEO_FRAME_WIDTH);
     cap.set(CAP_PROP_FRAME_HEIGHT, INPUT_VIDEO_FRAME_HEIGHT);
 
-    vector<Point2f> corners, previous_corners, flipped_corners;
+    vector<Point2f> corners, anchor_corners, flipped_corners;
     double corners_iou = 0;
     time_point frame_new_pose_start_time = now_time();
     double total_seconds_held = 0;
@@ -110,13 +110,14 @@ static void main_loop()
             flipped_corners = calibration_tools::flip_horiontally(frame_bgr.cols, corners);
             drawChessboardCorners(presentation_frame, CHESSBOARD_SIZE, flipped_corners, found);
 
-            corners_iou = calibration_tools::constellation_IoU(corners, previous_corners);
+            corners_iou = calibration_tools::constellation_IoU(corners, anchor_corners);
             pattern_is_being_held = (corners_iou > MIN_PATTERN_HOLD_IOU);
         }
 
         if (!pattern_is_being_held)
         {
             frame_new_pose_start_time = now_time();
+            anchor_corners = corners;
         }
 
         total_seconds_held = double(time_delta_ms(frame_new_pose_start_time) / 1000.0);
@@ -129,7 +130,6 @@ static void main_loop()
         if (total_seconds_held > MIN_SECONDS_HOLD_TO_ADD)
         {
             this_calibration.add_constellation(corners);
-            frame_new_pose_start_time = now_time();
         }
         
         // Create a string stream
@@ -153,8 +153,6 @@ static void main_loop()
         {
             return;
         }
-
-        previous_corners = corners;
     }
 
     return;
