@@ -61,11 +61,11 @@ PointConstellation3D pinhole_camera_calibration::calibration_tools::generate_che
 {
 	PointConstellation3D output;
 
-	for (int i = 0; i < pattern_size.width; i++)
+	for (int i = 0; i < pattern_size.height; i++)
 	{
-		for (int j = 0; j < pattern_size.height; j++)
+		for (int j = 0; j < pattern_size.width; j++)
 		{
-			output.emplace_back(i * square_side_length_mm, j * square_side_length_mm, 0.0f);
+			output.emplace_back(j * square_side_length_mm, i * square_side_length_mm, 0.0f);
 		}
 	}
 
@@ -80,13 +80,14 @@ pinhole_camera_calibration::camera_calibration::camera_calibration(float square_
 	calibration_pattern_world_constellations_ = ct::generate_chessboard_world_points(square_side_length_mm, pattern_size);
 }
 
-void pinhole_camera_calibration::camera_calibration::add_constellation(const PointConstellation2D& constellation)
+bool pinhole_camera_calibration::camera_calibration::add_constellation(const PointConstellation2D& constellation)
 {
-	if (!is_different_enough(constellation)) return;
+	if (!is_different_enough(constellation)) return false;
 
 	PointConstellation2D hull;
 	cv::convexHull(constellation, hull);
 	constellations_and_hulls_.push_back({ constellation, hull });
+	return true;
 }
 
 bool pinhole_camera_calibration::camera_calibration::is_different_enough(const PointConstellation2D& constellation)

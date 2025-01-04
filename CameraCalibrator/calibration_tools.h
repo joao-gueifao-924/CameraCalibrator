@@ -31,7 +31,7 @@ namespace pinhole_camera_calibration
 		camera_calibration(float square_side_length_mm, cv::Size pattern_size, cv::Size image_size, int total_colors = 32);
 
 		// only adds constellation to store if is_different_enough(constellation) is true
-		void add_constellation(const PointConstellation2D& constellation);
+		bool add_constellation(const PointConstellation2D& constellation);
 
 		// checks if constellation is different enough from all other constellations already stored
 		bool is_different_enough(const PointConstellation2D& constellation);
