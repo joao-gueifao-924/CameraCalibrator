@@ -30,7 +30,7 @@ public:
 		not_enough_registered_images,
 		same_previous_model,			// fitting was not retried, because current model already was fitted to the latest data
 		newly_fitted_camera_model,
-		fitting_unsuccesful,			// e.g., due to bad numerical convergence // if previously fitted model exists, it is kept
+        fitting_unsuccessful,			// e.g., due to bad numerical convergence // if previously fitted model exists, it is kept
 	};
 
 	class flat_chessboard_pattern

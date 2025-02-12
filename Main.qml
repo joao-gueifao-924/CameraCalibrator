@@ -16,20 +16,19 @@ ApplicationWindow {
     title: qsTr("Hello World")
     //visibility: Window.Maximized
 
+
+    // Background that will clear focus when clicked on
     Item {
-        id: root
+        id: backgroundStealFocus
         anchors.fill: parent
 
         MouseArea {
             anchors.fill: parent
             onClicked: {
-                root.forceActiveFocus()
+                backgroundStealFocus.forceActiveFocus()
             }
         }
     }
-
-    // Background that will clear focus when clicked
-
 
     RowLayout {
         anchors.fill: parent
@@ -130,7 +129,7 @@ ApplicationWindow {
                     id: inputCameraFeed_videoOutput
                     visible: false
                     Component.onCompleted:
-                       frameProcessor.inputVideoSink = inputCameraFeed_videoOutput.videoSink
+                       calibrationProcessor.inputVideoSink = inputCameraFeed_videoOutput.videoSink
                 }
 
                 VideoOutput {
@@ -140,20 +139,40 @@ ApplicationWindow {
                     height: parent.height
                     fillMode: VideoOutput.PreserveAspectFit
                     Component.onCompleted:
-                        frameProcessor.outputVideoSink = processedVideo_videoOutput.videoSink
+                        calibrationProcessor.outputVideoSink = processedVideo_videoOutput.videoSink
                 }
             }
 
 
 
             Rectangle {
-                id: optionsBeneathVideoOutput
+                id: panelBeneathVideoOutput
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.minimumHeight: 25
                 Layout.maximumHeight: 25
                 color: palette.window
 
+                RowLayout
+                {
+                    anchors.fill: parent
+
+                    Text {
+                        id: patternResultText
+                        text: calibrationProcessor.patternResultString
+                        color: palette.text
+                        Layout.preferredWidth: parent.width/2
+                        horizontalAlignment: Text.AlignLeft
+                    }
+
+                    Text {
+                        id: fittingResultText
+                        text: calibrationProcessor.fittingResultString
+                        color: palette.text
+                        Layout.preferredWidth: parent.width/2
+                        horizontalAlignment: Text.AlignLeft
+                    }
+                }
             }
         }
     }
@@ -182,9 +201,12 @@ ApplicationWindow {
     }
 
     CalibrationProcessor {
-        id: frameProcessor
+        id: calibrationProcessor
         maxFrameRate: 30.0
         square_side_length_mm: squareSideLengthNumberField.value
         pattern_size: Qt.size(patternCornersWideNumberField.value, patternCornersTallNumberField.value)
+
+        readonly property string fittingResultString: getFittingStatusQString(fittingStatus)
+        readonly property string patternResultString: getPatternStatusQString(patternStatus)
     }
 }

@@ -3,7 +3,6 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
-#include <iostream>
 
 static constexpr size_t FRAME_BUFFER_CAPACITY = 3;
 
@@ -26,16 +25,29 @@ void CalibrationProcessor::processFrames() {
 
         camera_calibration_->set_image_size(ocv_image.size());
 
-
         cv::Mat presentation_frame = singleImageIteration(ocv_image);
-        cv::imshow("", presentation_frame);
-        cv::waitKey(1);
 
         if (!m_outputVideoSink) return;
         QImage outImage(presentation_frame.data, presentation_frame.cols, presentation_frame.rows, presentation_frame.step, QImage::Format_BGR888);
         QVideoFrame outFrame(outImage.copy()); // create a deep copy to ensure data ownership elsewhere
         m_outputVideoSink->setVideoFrame(outFrame);
     }
+}
+
+void CalibrationProcessor::set_fitting_status(camera_calibration::fitting_status status)
+{
+    CalibrationProcessor::fitting_status qstatus = toQtEnum(status);
+    if (qstatus == fitting_status_) return;
+    fitting_status_.store(qstatus);
+    emit fitting_statusChanged();
+}
+
+void CalibrationProcessor::set_pattern_status(camera_calibration::pattern_status status)
+{
+    CalibrationProcessor::pattern_status qstatus = toQtEnum(status);
+    if (qstatus == pattern_status_) return;
+    pattern_status_.store(qstatus);
+    emit pattern_statusChanged();
 }
 
 CalibrationProcessor::fitting_status CalibrationProcessor::toQtEnum(camera_calibration::fitting_status val)
@@ -49,8 +61,8 @@ CalibrationProcessor::fitting_status CalibrationProcessor::toQtEnum(camera_calib
         return fitting_status::SamePreviousModel;
     case camera_calibration::fitting_status::newly_fitted_camera_model:
         return fitting_status::NewlyFittedCameraModel;
-    case camera_calibration::fitting_status::fitting_unsuccesful:
-        return fitting_status::FittingUnsuccesful;
+    case camera_calibration::fitting_status::fitting_unsuccessful:
+        return fitting_status::FittingUnsuccessful;
     default:
         throw std::invalid_argument("Unrecongnised value. Keep your enums in sync!");
     }
@@ -221,6 +233,7 @@ cv::Mat CalibrationProcessor::singleImageIteration(cv::Mat image_bgr)
     }
 
     auto pattern_status = camera_calibration_->try_register(image_bgr);
+    set_pattern_status(pattern_status);
 
     cv::Mat presentation_frame = camera_calibration_->render_feedback_image(true);
     //cv::imshow("INPUT_IMAGE_WINDOW_TITLE", presentation_frame);
@@ -228,34 +241,15 @@ cv::Mat CalibrationProcessor::singleImageIteration(cv::Mat image_bgr)
 
     camera_calibration::fitting_status fitting_status{ camera_calibration::fitting_status::undefined };
 
-    switch (pattern_status)
+    if (pattern_status == camera_calibration::pattern_status::pattern_accepted)
     {
-    case camera_calibration::pattern_status::pattern_not_found:
-        std::cout << "Pattern not found" << std::endl;
-        break;
-    case camera_calibration::pattern_status::pattern_not_configured:
-        std::cout << "Pattern not configured" << std::endl;
-        break;
-    case camera_calibration::pattern_status::pattern_too_similar:
-        std::cout << "Pattern too similar" << std::endl;
-        break;
-    case camera_calibration::pattern_status::pattern_not_held_long_enough:
-        std::cout << "Pattern not held long enough" << std::endl;
-        break;
-    case camera_calibration::pattern_status::pattern_accepted:
-        std::cout << "Pattern accepted" << std::endl;
         fitting_status = camera_calibration_->try_fit();
 
-        if (fitting_status == camera_calibration::fitting_status::newly_fitted_camera_model)
-        {
-            //auto model = this_calibration.extract_model();
-            //std::cout << model;
-        }
-        break;
-    default:
-        throw std::logic_error("Unexpected pattern_status value");
-        break;
+
+        //auto model = this_calibration.extract_model();
+        //         //std::cout << model;
     }
 
+    set_fitting_status(fitting_status);
     return presentation_frame;
 }

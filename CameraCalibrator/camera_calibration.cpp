@@ -140,7 +140,7 @@ camera_calibration::pattern_status camera_calibration::try_register(cv::Mat fram
 
         double total_seconds_held = double(time_delta_ms(frame_new_pose_start_time) / 1000.0);
 
-        std::cout << "Pattern held for " << total_seconds_held << " seconds" << std::endl;
+        //std::cout << "Pattern held for " << total_seconds_held << " seconds" << std::endl;
 
         if (total_seconds_held > MIN_SECONDS_HOLD_TO_CHECK_SIMILARITY && !is_different_enough(corners))
         {
@@ -195,9 +195,9 @@ camera_calibration::fitting_status camera_calibration::try_fit()
         distCoeffs, rvecs, tvecs);// , stdDeviationsIntrinsics, stdDeviationsExtrinsics, perViewErrors);
 
     // Print results
-    std::cout << "Camera Matrix:\n" << cameraMatrix << std::endl;
-    std::cout << "Distortion Coefficients:\n" << distCoeffs << std::endl;
-    std::cout << "Reprojection Error: " << reprojectionError << std::endl;
+    // std::cout << "Camera Matrix:\n" << cameraMatrix << std::endl;
+    // std::cout << "Distortion Coefficients:\n" << distCoeffs << std::endl;
+    // std::cout << "Reprojection Error: " << reprojectionError << std::endl;
 
     //double fov_x_degrees = 2 * std::atan(image_size_.width / (2*cameraMatrix.))
 

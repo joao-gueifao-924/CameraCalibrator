@@ -26,6 +26,28 @@ public:
         PatternAccepted
     };
     Q_ENUM(pattern_status)
+    std::string getPatternStatusString(pattern_status status) {
+        switch (status) {
+        case pattern_status::Undefined:
+            return "Pattern status undefined";
+        case pattern_status::PatternNotConfigured:
+            return "Pattern not configured";
+        case pattern_status::PatternNotFound:
+            return "Pattern not found";
+        case pattern_status::PatternTooSimilar:
+            return "Pattern too similar";
+        case pattern_status::PatternNotHeldLongEnough:
+            return "Pattern not held long enough";
+        case pattern_status::PatternAccepted:
+            return "Pattern accepted";
+        default:
+            return "Unknown Status";
+        }
+    }
+    Q_INVOKABLE QString getPatternStatusQString(pattern_status status)
+    {
+        return QString::fromStdString(getPatternStatusString(status));
+    }
 
     // Remember to keep in sync with corresponding enums inside camera_calibration backend class!
     enum class fitting_status
@@ -34,17 +56,37 @@ public:
         NotEnoughRegisteredImages,
         SamePreviousModel,			// fitting was not retried, because current model already was fitted to the latest data
         NewlyFittedCameraModel,
-        FittingUnsuccesful,			// e.g., due to bad numerical convergence // if previously fitted model exists, it is kept
+        FittingUnsuccessful,			// e.g., due to bad numerical convergence // if previously fitted model exists, it is kept
     };
     Q_ENUM(fitting_status)
+    std::string getFittingStatusString(fitting_status status) {
+        switch (status) {
+        case fitting_status::Undefined:
+            return "Fitting status undefined";
+        case fitting_status::NotEnoughRegisteredImages:
+            return "Insufficient images for calibration";
+        case fitting_status::SamePreviousModel:
+            return "Using previous calibration model";
+        case fitting_status::NewlyFittedCameraModel:
+            return "Newly fitted calibration model";
+        case fitting_status::FittingUnsuccessful:
+            return "Fitting unsuccessful";
+        default:
+            return "Unknown Status";
+        }
+    }
+    Q_INVOKABLE QString getFittingStatusQString(fitting_status status)
+    {
+        return QString::fromStdString(getFittingStatusString(status));
+    }
 
     Q_PROPERTY(double maxFrameRate READ maxFrameRate WRITE setMaxFrameRate NOTIFY maxFrameRateChanged)
     Q_PROPERTY(QVideoSink* inputVideoSink READ inputVideoSink WRITE setInputVideoSink NOTIFY inputVideoSinkChanged)
     Q_PROPERTY(QVideoSink* outputVideoSink READ outputVideoSink WRITE setOutputVideoSink NOTIFY outputVideoSinkChanged)
     Q_PROPERTY(double square_side_length_mm READ square_side_length_mm WRITE setSquare_side_length_mm NOTIFY square_side_length_mmChanged);
     Q_PROPERTY(QSize pattern_size READ pattern_size WRITE setPattern_size NOTIFY pattern_sizeChanged);
-    Q_PROPERTY(fitting_status fittingResult READ get_fitting_status NOTIFY fitting_statusChanged);
-    Q_PROPERTY(pattern_status patternResult READ get_pattern_status NOTIFY pattern_statusChanged);
+    Q_PROPERTY(fitting_status fittingStatus READ get_fitting_status NOTIFY fitting_statusChanged);
+    Q_PROPERTY(pattern_status patternStatus READ get_pattern_status NOTIFY pattern_statusChanged);
 
 public:
     static constexpr double DEFAULT_MAX_FRAME_RATE = 30.0;
@@ -66,6 +108,7 @@ public:
     fitting_status get_fitting_status();
     pattern_status get_pattern_status();
 
+
 signals:
     void maxFrameRateChanged();
     void inputVideoSinkChanged();
@@ -84,6 +127,9 @@ private:
     void initConsumerThread();
     pattern_status toQtEnum(camera_calibration::pattern_status val);
     fitting_status toQtEnum(camera_calibration::fitting_status val);
+
+    void set_fitting_status(camera_calibration::fitting_status status);
+    void set_pattern_status(camera_calibration::pattern_status status);
 
     std::unique_ptr<camera_calibration> camera_calibration_;
     circular_buffer_thread_safe<QImage> m_inputImagesBuffer;
