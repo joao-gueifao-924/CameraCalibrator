@@ -31,7 +31,7 @@ long long time_delta_ms(time_point start)
 
 
 
-camera_calibration_model::PointConstellation2f camera_calibration_model::flip_horizontally(int image_width, const camera_calibration_model::PointConstellation2f& points)
+camera_calibration::PointConstellation2f camera_calibration::flip_horizontally(int image_width, const camera_calibration::PointConstellation2f& points)
 {
     PointConstellation2f output;
     output.reserve(points.size());
@@ -47,25 +47,71 @@ camera_calibration_model::PointConstellation2f camera_calibration_model::flip_ho
     return output;
 }
 
-camera_calibration_model::camera_calibration_model(float square_side_length_mm, cv::Size pattern_size, cv::Size image_size, bool input_image_folder_mode)
-    : calibration_pattern_{ std::make_unique<flat_chessboard_pattern>(square_side_length_mm , pattern_size) }
-    , image_size_{ image_size }
-    , input_image_folder_mode_{ input_image_folder_mode }
+void camera_calibration::initialize_class()
 {
     generate_colormap();
     frame_new_pose_start_time = now_time();
 }
 
-camera_calibration_model::pattern_status camera_calibration_model::try_register(cv::Mat frame_bgr)
+camera_calibration::camera_calibration()
+{
+    initialize_class();
+}
+
+camera_calibration::camera_calibration(float square_side_length_mm, cv::Size pattern_size, cv::Size image_size, bool input_image_folder_mode)
+    : calibration_pattern_{ std::make_unique<flat_chessboard_pattern>(square_side_length_mm , pattern_size) }
+    , image_size_{ image_size }
+    , input_image_folder_mode_{ input_image_folder_mode }
+{
+    initialize_class();
+}
+
+float camera_calibration::square_side_length_mm()
+{
+    if (!calibration_pattern_) return 0.0f;
+
+    return calibration_pattern_->square_side_length_mm_;
+}
+
+cv::Size camera_calibration::pattern_size()
+{
+    if (!calibration_pattern_) return cv::Size();
+    return calibration_pattern_->size_;
+}
+
+bool camera_calibration::input_image_folder_mode()
+{
+    return input_image_folder_mode_;
+}
+
+void camera_calibration::set_calibration_pattern(float square_side_length_mm, cv::Size pattern_size)
+{
+    calibration_pattern_ = std::make_unique<flat_chessboard_pattern>(square_side_length_mm , pattern_size);
+}
+
+void camera_calibration::set_image_size(cv::Size image_size)
+{
+    image_size_ = image_size;
+}
+
+void camera_calibration::set_input_image_folder_mode(bool value)
+{
+    input_image_folder_mode_ = value;
+}
+
+camera_calibration::pattern_status camera_calibration::try_register(cv::Mat frame_bgr)
 {
     using namespace std;
     using namespace cv;
-    camera_calibration_model::PointConstellation2f corners;
+    camera_calibration::PointConstellation2f corners;
 
     last_input_videoframe = frame_bgr.clone();
     last_detected_pattern_corners_videoframe.clear();
 
-    assert(calibration_pattern_);
+    if (!calibration_pattern_ || !calibration_pattern_->isValid())
+    {
+        return pattern_status::pattern_not_configured;
+    }
 
     if (!findChessboardCorners(frame_bgr, calibration_pattern_->size_,
                                corners, chessboard_flags))
@@ -84,7 +130,7 @@ camera_calibration_model::pattern_status camera_calibration_model::try_register(
     }
     else // Input video mode
     {
-        double corners_iou = camera_calibration_model::constellation_IoU(corners, anchor_corners);
+        double corners_iou = camera_calibration::constellation_IoU(corners, anchor_corners);
         bool pattern_is_being_held = (corners_iou > MIN_PATTERN_HOLD_IOU);
 
         if (!pattern_is_being_held) {
@@ -124,10 +170,10 @@ camera_calibration_model::pattern_status camera_calibration_model::try_register(
     return pattern_status::pattern_accepted;
 }
 
-camera_calibration_model::fitting_status camera_calibration_model::try_fit()
+camera_calibration::fitting_status camera_calibration::try_fit()
 {
-    if (pattern_registrations.size() < MIN_TOTAL_PATTERN_REGISTRATIONS)
-	    return camera_calibration_model::fitting_status::not_enough_registered_images;
+    if (pattern_registrations_.size() < MIN_TOTAL_PATTERN_REGISTRATIONS)
+	    return camera_calibration::fitting_status::not_enough_registered_images;
 
     // Perform camera calibration
     cv::Mat cameraMatrix, distCoeffs;
@@ -138,9 +184,9 @@ camera_calibration_model::fitting_status camera_calibration_model::try_fit()
 
     assert(calibration_pattern_);
 
-    for (size_t i = 0; i < pattern_registrations.size(); i++)
+    for (size_t i = 0; i < pattern_registrations_.size(); i++)
     {
-        image_points.push_back(pattern_registrations[i].pattern_corners);
+        image_points.push_back(pattern_registrations_[i].pattern_corners);
         object_world_points_copies.push_back(calibration_pattern_->corner_3d_coordinates_); // push several copies
     }
 
@@ -160,26 +206,26 @@ camera_calibration_model::fitting_status camera_calibration_model::try_fit()
     return fitting_status::newly_fitted_camera_model;
 }
 
-camera_calibration_model::camera_model camera_calibration_model::extract_model()
+camera_calibration::camera_model camera_calibration::extract_model()
 {
     throw std::logic_error("Not yet implemented");
     //return last_fitted_model_;
 }
 
-cv::Mat camera_calibration_model::render_feedback_image(bool flip_horizontally)
+cv::Mat camera_calibration::render_feedback_image(bool flip_horizontally)
 {
     cv::Mat output = last_input_videoframe.clone();
 
     std::mt19937 gen(42); // Fixed seed for reproducibility
     std::uniform_int_distribution<int> dist(0, colormap_.size() - 1); // Range [0, total_colors-1]
 
-    for (size_t i = 0; i < pattern_registrations.size(); i++)
+    for (size_t i = 0; i < pattern_registrations_.size(); i++)
     {
         // pick random color from colormap
         int random_idx = dist(gen); // Generate a random index
         cv::Vec3b random_color = colormap_.at(random_idx);
 
-        const PointConstellation2f& hull = pattern_registrations[i].pattern_corners_convex_hull;
+        const PointConstellation2f& hull = pattern_registrations_[i].pattern_corners_convex_hull;
         std::vector<cv::Point2i> hull_integers;
         hull_integers.reserve(hull.size());
 
@@ -202,16 +248,34 @@ cv::Mat camera_calibration_model::render_feedback_image(bool flip_horizontally)
 
     cv::flip(output, output, 1);
 
-    PointConstellation2f flipped_corners = camera_calibration_model::flip_horizontally(last_input_videoframe.cols, last_detected_pattern_corners_videoframe);
+    PointConstellation2f flipped_corners = camera_calibration::flip_horizontally(last_input_videoframe.cols, last_detected_pattern_corners_videoframe);
 
-    assert(calibration_pattern_);
-    drawChessboardCorners(output, calibration_pattern_->size_, flipped_corners, true);
+    if(calibration_pattern_)
+        drawChessboardCorners(output, calibration_pattern_->size_, flipped_corners, true);
 
     return output;
 }
 
+camera_calibration::PointConstellation2f camera_calibration::get_currently_detected_pattern_hull()
+{
+    camera_calibration::PointConstellation2f hull;
+    cv::convexHull(last_detected_pattern_corners_videoframe, hull);
+    return hull;
+}
 
-void camera_calibration_model::flat_chessboard_pattern::generate_corner_3d_coordinates()
+std::vector<camera_calibration::PointConstellation2f> camera_calibration::get_pattern_registration_hulls()
+{
+    std::vector<PointConstellation2f> output;
+    output.reserve(pattern_registrations_.size());
+    
+    for (size_t i = 0; i < pattern_registrations_.size(); i++)
+    {
+        output.push_back(pattern_registrations_[i].pattern_corners_convex_hull);
+    }
+    return output;
+}
+
+void camera_calibration::flat_chessboard_pattern::generate_corner_3d_coordinates()
 {
 	for (int i = 0; i < size_.height; i++)
 	{
@@ -222,21 +286,30 @@ void camera_calibration_model::flat_chessboard_pattern::generate_corner_3d_coord
 	}
 }
 
-std::ostream& operator<<(std::ostream& os, const camera_calibration_model::camera_model& obj)
+std::ostream& operator<<(std::ostream& os, const camera_calibration::camera_model& obj)
 {
 	os << "Reproj error RMS: " << obj.reprojection_error_rms_;
 	return os; // Return the stream for chaining
 }
 
-camera_calibration_model::flat_chessboard_pattern::flat_chessboard_pattern(float square_side_length_mm, cv::Size pattern_size)
+camera_calibration::flat_chessboard_pattern::flat_chessboard_pattern(float square_side_length_mm, cv::Size pattern_size)
     : square_side_length_mm_{square_side_length_mm}
     , size_{pattern_size}
 {
     generate_corner_3d_coordinates();
 }
 
+bool camera_calibration::flat_chessboard_pattern::isValid()
+{
+    if (square_side_length_mm_ < 0.01
+        || size_.width < 2 || size_.height < 2)
+        return false;
 
-double camera_calibration_model::constellation_IoU(const camera_calibration_model::PointConstellation2f& constellation_a, const camera_calibration_model::PointConstellation2f& constellation_b)
+    return true;
+}
+
+
+double camera_calibration::constellation_IoU(const camera_calibration::PointConstellation2f& constellation_a, const camera_calibration::PointConstellation2f& constellation_b)
 {
     if (constellation_a.size() < 4 || constellation_b.size() < 4)
     {
@@ -247,11 +320,11 @@ double camera_calibration_model::constellation_IoU(const camera_calibration_mode
     cv::convexHull(constellation_a, hull_a);
     cv::convexHull(constellation_b, hull_b);
 
-    return camera_calibration_model::convex_polygons_IoU(hull_a, hull_b);
+    return camera_calibration::convex_polygons_IoU(hull_a, hull_b);
 }
 
 
-double camera_calibration_model::convex_polygons_IoU(const camera_calibration_model::PointConstellation2f& polygon_a, const camera_calibration_model::PointConstellation2f& polygon_b)
+double camera_calibration::convex_polygons_IoU(const camera_calibration::PointConstellation2f& polygon_a, const camera_calibration::PointConstellation2f& polygon_b)
 {
     if (polygon_a.size() < 4 || polygon_b.size() < 4)
     {
@@ -271,14 +344,14 @@ double camera_calibration_model::convex_polygons_IoU(const camera_calibration_mo
     return iou;
 }
 
-bool camera_calibration_model::is_different_enough(const camera_calibration_model::PointConstellation2f& constellation)
+bool camera_calibration::is_different_enough(const camera_calibration::PointConstellation2f& constellation)
 {
-    camera_calibration_model::PointConstellation2f hull;
+    camera_calibration::PointConstellation2f hull;
     cv::convexHull(constellation, hull);
 
-    for (size_t i = 0; i < pattern_registrations.size(); i++)
+    for (size_t i = 0; i < pattern_registrations_.size(); i++)
     {
-        double iou = camera_calibration_model::convex_polygons_IoU(hull, pattern_registrations[i].pattern_corners_convex_hull);
+        double iou = camera_calibration::convex_polygons_IoU(hull, pattern_registrations_[i].pattern_corners_convex_hull);
 
         if (iou > CONSTELLATION_IOU_THRESHOLD)
         {
@@ -289,7 +362,7 @@ bool camera_calibration_model::is_different_enough(const camera_calibration_mode
     return true;
 }
 
-bool camera_calibration_model::add_constellation(cv::Mat input_image_bgr, camera_calibration_model::PointConstellation2f constellation)
+bool camera_calibration::add_constellation(cv::Mat input_image_bgr, camera_calibration::PointConstellation2f constellation)
 {
     if (!is_different_enough(constellation)) return false;
 
@@ -301,11 +374,11 @@ bool camera_calibration_model::add_constellation(cv::Mat input_image_bgr, camera
     new_registration.pattern_corners = constellation;
     new_registration.pattern_corners_convex_hull = hull;
     
-    pattern_registrations.push_back(new_registration);
+    pattern_registrations_.push_back(new_registration);
     return true;
 }
 
-void camera_calibration_model::generate_colormap(int total_colors)
+void camera_calibration::generate_colormap(int total_colors)
 {
     cv::Mat grayscale(1, 256, CV_8UC1); // Grayscale image
     for (int i = 0; i < 256; ++i)
@@ -322,7 +395,7 @@ void camera_calibration_model::generate_colormap(int total_colors)
     }
 }
 
-bool camera_calibration_model::save_registered_images_to_folder(std::filesystem::path path)
+bool camera_calibration::save_registered_images_to_folder(std::filesystem::path path)
 {
     cv::Mat frame_bgr;
     int total_pictures_saved = 0;
@@ -340,9 +413,9 @@ bool camera_calibration_model::save_registered_images_to_folder(std::filesystem:
     const std::string formatted_timestamp_str = oss.str();
 
     // Save eachh image to file in the format image_0000.png, image_0001.png, etc.
-    for (size_t i = 0; i < pattern_registrations.size(); i++)
+    for (size_t i = 0; i < pattern_registrations_.size(); i++)
     {
-        frame_bgr = pattern_registrations[i].input_image;
+        frame_bgr = pattern_registrations_[i].input_image;
         std::ostringstream filename;
         filename << "image_" << formatted_timestamp_str << "_" << std::setw(4) << std::setfill('0') << total_pictures_saved++ << ".png";
         auto full_path = path / filename.str();
@@ -356,13 +429,13 @@ bool camera_calibration_model::save_registered_images_to_folder(std::filesystem:
     return true;
 }
 
-camera_calibration_model::camera_model::camera_model(cv::Size image_size, cv::Mat camera_matrix_K)
+camera_calibration::camera_model::camera_model(cv::Size image_size, cv::Mat camera_matrix_K)
     : image_size_{ image_size }
     , camera_matrix_K_{ camera_matrix_K }
 {
 }
 
-camera_calibration_model::camera_model::camera_model(double reprojection_error_rms, cv::Size image_size, cv::Mat camera_matrix_K, cv::Mat distortion_coefficients)
+camera_calibration::camera_model::camera_model(double reprojection_error_rms, cv::Size image_size, cv::Mat camera_matrix_K, cv::Mat distortion_coefficients)
     : reprojection_error_rms_{reprojection_error_rms}
     , image_size_{image_size}
     , camera_matrix_K_{camera_matrix_K}

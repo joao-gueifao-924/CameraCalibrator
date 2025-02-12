@@ -20,7 +20,7 @@ static std::string INPUT_IMAGE_WINDOW_TITLE{ "Input image & Detections" };
 static constexpr int ESCAPE_KEY = 27;
 
 
-bool single_image_iteration(cv::Mat image_bgr, camera_calibration_model& this_calibration)
+bool single_image_iteration(cv::Mat image_bgr, camera_calibration& this_calibration)
 {
     if (image_bgr.size() != INPUT_VIDEO_FRAME_SIZE)
     {
@@ -38,24 +38,24 @@ bool single_image_iteration(cv::Mat image_bgr, camera_calibration_model& this_ca
     int pressed_key = cv::waitKey(1);
     if (pressed_key == ESCAPE_KEY) return false;
 
-    camera_calibration_model::fitting_status fitting_status{ camera_calibration_model::fitting_status::undefined };
+    camera_calibration::fitting_status fitting_status{ camera_calibration::fitting_status::undefined };
 
     switch (pattern_status)
     {
-    case camera_calibration_model::pattern_status::pattern_not_found:
+    case camera_calibration::pattern_status::pattern_not_found:
         std::cout << "Pattern not found" << std::endl;
         break;
-    case camera_calibration_model::pattern_status::pattern_too_similar:
+    case camera_calibration::pattern_status::pattern_too_similar:
         std::cout << "Pattern too similar" << std::endl;
         break;
-    case camera_calibration_model::pattern_status::pattern_not_held_long_enough:
+    case camera_calibration::pattern_status::pattern_not_held_long_enough:
         std::cout << "Pattern not held long enough" << std::endl;
         break;
-    case camera_calibration_model::pattern_status::pattern_accepted:
+    case camera_calibration::pattern_status::pattern_accepted:
         std::cout << "Pattern accepted" << std::endl;
         fitting_status = this_calibration.try_fit();
 
-        if (fitting_status == camera_calibration_model::fitting_status::newly_fitted_camera_model)
+        if (fitting_status == camera_calibration::fitting_status::newly_fitted_camera_model)
         {
             //auto model = this_calibration.extract_model();
             //std::cout << model;
@@ -71,13 +71,13 @@ bool single_image_iteration(cv::Mat image_bgr, camera_calibration_model& this_ca
 
 int image_folder_main()
 {
-    camera_calibration_model this_calibration(CHESSBOARD_PATTERN_SQUARE_SIDE_LENGTH_mm, CHESSBOARD_PATTERN_SIZE, INPUT_VIDEO_FRAME_SIZE, true);
+    camera_calibration this_calibration(CHESSBOARD_PATTERN_SQUARE_SIDE_LENGTH_mm, CHESSBOARD_PATTERN_SIZE, INPUT_VIDEO_FRAME_SIZE, true);
 
     // Extracting path of individual image stored in a given directory
     std::vector<cv::String> images;
 
     // Path of the folder containing checkerboard images
-    std::string path = R"(C:\Users\joaog\temp_program_output\CameraCalibrator\BACKUP\*.png)";
+    std::string path = R"(C:\Users\joaog\temp_program_output\CameraCalibrator\*.png)";
     cv::glob(path, images);
 
     cv::Mat frame_bgr;
@@ -92,8 +92,6 @@ int image_folder_main()
         };
     }
 
-    this_calibration.save_registered_images_to_folder(IMAGE_OUTPUT_PATH);
-
     return EXIT_SUCCESS;
 }
 
@@ -103,7 +101,7 @@ int video_main()
     cap.set(CAP_PROP_FRAME_WIDTH, INPUT_VIDEO_FRAME_SIZE.width);
     cap.set(CAP_PROP_FRAME_HEIGHT, INPUT_VIDEO_FRAME_SIZE.height);
 
-    camera_calibration_model this_calibration(CHESSBOARD_PATTERN_SQUARE_SIDE_LENGTH_mm, CHESSBOARD_PATTERN_SIZE, INPUT_VIDEO_FRAME_SIZE, false);
+    camera_calibration this_calibration(CHESSBOARD_PATTERN_SQUARE_SIDE_LENGTH_mm, CHESSBOARD_PATTERN_SIZE, INPUT_VIDEO_FRAME_SIZE, false);
     
     Mat frame_bgr;
 
