@@ -1,11 +1,14 @@
 import QtQuick
 import QtQuick.Controls.Universal
 import QtQuick.Layouts
+import QtQuick.Dialogs
+import QtCore
 import QtMultimedia
 import CameraCalibrator 1.0
 
 ApplicationWindow {
     id: mainWindow
+    title: "Camera Calibrator"
     Universal.theme: Universal.System
 
     // width: 640
@@ -13,7 +16,6 @@ ApplicationWindow {
     visible: true
     minimumWidth: 853
     minimumHeight: 480
-    title: qsTr("Hello World")
     //visibility: Window.Maximized
 
 
@@ -41,34 +43,51 @@ ApplicationWindow {
             Layout.preferredWidth: 200
             color: palette.window
 
-            // Sidebar content goes here
             ColumnLayout {
-                //anchors.top: mainWindow
                 spacing: 10
                 // Add your menu items here
 
+                Column {
+                    spacing: 10
+
+                    ButtonGroup {
+                        id: modeGroup
+                        exclusive: true
+                    }
+
+                    RadioButton {
+                        id: liveVideoModeRadioButton
+                        text: "Live Video Mode"
+                        checked: false
+                        ButtonGroup.group: modeGroup
+                    }
+
+                    RadioButton {
+                        id: imageFolderModeRadioButton
+                        text: "Image Folder Mode"
+                        checked: false
+                        ButtonGroup.group: modeGroup
+                    }
+                }
+
                 ComboBox {
-                    Layout.minimumWidth: 200
                     id: cbCamera
+                    Layout.minimumWidth: 200
+                    visible: liveVideoModeRadioButton.checked
                     model: mediaDevices.videoInputs
                     textRole: "description"
-                    onActivated: camera.active = true
                 }
 
                 Button {
-                    id: button1
-                    text: "Load Calibration"
+                    id: selectFolderButton
+                    text: "Open Folder..."
+                    visible: imageFolderModeRadioButton.checked
                     Layout.fillWidth: true
-                }
-                Button {
-                    id: button2
-                    text: "Save Calibration"
-                    Layout.fillWidth: true
+                    onClicked: inputImageFolderDialog.open()
                 }
 
                 Label {
                     text: "Square side length (mm)"
-                    //font.pixelSize: 14
                 }
 
                 NumberField
@@ -80,28 +99,29 @@ ApplicationWindow {
                 }
 
                 Label {
-                    text: "Pattern corners wide"
-                    //font.pixelSize: 14
+                    text: "Total corners wide x tall"
                 }
 
-                NumberField
+                RowLayout
                 {
-                    id: patternCornersWideNumberField
-                    decimals: 0
-                    value: 10
-                    width: 300
-                }
+                    NumberField
+                    {
+                        id: patternCornersWideNumberField
+                        decimals: 0
+                        value: 10
+                        width: 300
+                    }
 
-                Label {
-                    text: "Pattern corners tall"
-                    //font.pixelSize: 14
-                }
+                    Label {
+                        text: "X"
+                    }
 
-                NumberField
-                {
-                    id: patternCornersTallNumberField
-                    decimals: 0
-                    value: 6
+                    NumberField
+                    {
+                        id: patternCornersTallNumberField
+                        decimals: 0
+                        value: 6
+                    }
                 }
             }
         }
@@ -127,13 +147,14 @@ ApplicationWindow {
 
                 VideoOutput {
                     id: inputCameraFeed_videoOutput
-                    visible: false
+                    visible: false // this is a hack, I need to learn how to avoid a intermediary video output
                     Component.onCompleted:
                        calibrationProcessor.inputVideoSink = inputCameraFeed_videoOutput.videoSink
                 }
 
                 VideoOutput {
                     id: processedVideo_videoOutput
+                    visible: liveVideoModeRadioButton.checked
                     anchors.centerIn: parent
                     width: parent.width
                     height: parent.height
@@ -177,6 +198,16 @@ ApplicationWindow {
         }
     }
 
+    FolderDialog {
+        id: inputImageFolderDialog
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        title: "Please choose a folder with your images"
+
+        onAccepted: {
+            console.log("Selected folder:", selectedFolder)
+        }
+    }
+
 
     MediaDevices {
         id: mediaDevices
@@ -193,7 +224,7 @@ ApplicationWindow {
     CaptureSession {
           camera: Camera {
             id: camera
-            active: true
+            active: liveVideoModeRadioButton.checked
             cameraDevice: mediaDevices.videoInputs[cbCamera.currentIndex]
           }
 
