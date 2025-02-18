@@ -137,7 +137,7 @@ private slots:
     void receiveFrame(const QVideoFrame &frame);
 
 private:
-    cv::Mat singleImageIteration(cv::Mat image_bgr);
+    cv::Mat singleImageIteration(cv::Mat image_bgr, bool try_fit_new_model = true);
     void processFrames();
     pattern_status toQtEnum(camera_calibration::pattern_status val);
     fitting_status toQtEnum(camera_calibration::fitting_status val);

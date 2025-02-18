@@ -67,7 +67,8 @@ void CalibrationProcessor::processFrames() {
             {
                 ocv_image = cv::imread(images[i]);
                 camera_calibration_->set_image_size(ocv_image.size());
-                presentation_frame = singleImageIteration(ocv_image);
+                bool tryFitNewModel = (i == images.size()-1); // only fit model at last image registration
+                presentation_frame = singleImageIteration(ocv_image, tryFitNewModel);
 
                 presentOutputFrame();
             }
@@ -93,16 +94,9 @@ void CalibrationProcessor::processFrames() {
             camera_calibration_->set_image_size(ocv_image.size());
             presentation_frame = singleImageIteration(ocv_image);
             setReadyToSaveCalibration(camera_calibration_->is_model_available());
+
+            presentOutputFrame();
         }
-
-        // if (m_outputVideoSink)
-        // {
-        //     QImage outImage(presentation_frame.data, presentation_frame.cols, presentation_frame.rows, presentation_frame.step, QImage::Format_BGR888);
-        //     QVideoFrame outFrame(outImage.copy()); // create a deep copy to ensure data ownership elsewhere
-        //     m_outputVideoSink->setVideoFrame(outFrame);
-        // }
-
-        presentOutputFrame();
     }
 }
 
@@ -351,7 +345,7 @@ void CalibrationProcessor::receiveFrame(const QVideoFrame &frame)
     }
 }
 
-cv::Mat CalibrationProcessor::singleImageIteration(cv::Mat image_bgr)
+cv::Mat CalibrationProcessor::singleImageIteration(cv::Mat image_bgr, bool try_fit_new_model)
 {
     if (image_bgr.empty())
     {
@@ -374,13 +368,16 @@ cv::Mat CalibrationProcessor::singleImageIteration(cv::Mat image_bgr)
 
     camera_calibration::fitting_status fitting_status{ camera_calibration::fitting_status::undefined };
 
-    if (pattern_status == camera_calibration::pattern_status::pattern_accepted)
+    if (pattern_status == camera_calibration::pattern_status::pattern_accepted && try_fit_new_model)
     {
         fitting_status = camera_calibration_->try_fit();
 
-
-        //auto model = this_calibration.extract_model();
-        //         //std::cout << model;
+        if (fitting_status == camera_calibration::fitting_status::newly_fitted_camera_model)
+        {
+            camera_calibration::camera_model new_model = camera_calibration_->extract_model();
+            std::cout << "New camera model: " << std::endl;
+            std::cout << new_model << std::endl;
+        }
     }
 
     set_fitting_status(fitting_status);

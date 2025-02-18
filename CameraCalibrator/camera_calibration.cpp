@@ -14,6 +14,8 @@ double CONSTELLATION_IOU_THRESHOLD{ 0.7 };
 static const cv::Size WINDOW_SEARCH_SIZE{ 11, 11 };
 
 
+// Utilitary stuff. This should be put into a separate utilitary repo someday...
+
 typedef std::chrono::steady_clock::time_point time_point;
 
 time_point now_time()
@@ -29,6 +31,49 @@ long long time_delta_ms(time_point start)
     return time_delta_ms(now_time(), start);
 }
 
+double& e(cv::Mat M, size_t row, size_t col)
+{
+    if (M.depth() != CV_64F || M.channels() != 1)
+    {
+        throw std::invalid_argument("M has no CV_64F depth");
+    }
+
+    if (row > M.rows || col > M.cols)
+    {
+        throw std::invalid_argument("Trying to access M out of bounds");
+    }
+
+    return M.at<double>(row, col);
+}
+
+class MatTypeInfo {
+public:
+    static std::string getDepthInfo(const cv::Mat& mat) {
+        switch (mat.depth()) {
+        case CV_8U:  return "CV_8U  (8-bit unsigned integer)";
+        case CV_8S:  return "CV_8S  (8-bit signed integer)";
+        case CV_16U: return "CV_16U (16-bit unsigned integer)";
+        case CV_16S: return "CV_16S (16-bit signed integer)";
+        case CV_32S: return "CV_32S (32-bit signed integer)";
+        case CV_32F: return "CV_32F (32-bit float)";
+        case CV_64F: return "CV_64F (64-bit float)";
+        default:     return "Unknown depth";
+        }
+    }
+
+    static std::string getChannelsInfo(const cv::Mat& mat) {
+        return "Channels: " + std::to_string(mat.channels());
+    }
+
+    static void printMatInfo(const cv::Mat& mat) {
+        std::cout << "Matrix Information:\n"
+                  << "Size: " << mat.rows << "x" << mat.cols << "\n"
+                  << "Depth: " << getDepthInfo(mat) << "\n"
+                  << getChannelsInfo(mat) << "\n"
+                  << "Total elements: " << mat.total() << "\n"
+                  << "Continuous: " << (mat.isContinuous() ? "Yes" : "No") << "\n";
+    }
+};
 
 
 camera_calibration::PointConstellation2f camera_calibration::flip_horizontally(int image_width, const camera_calibration::PointConstellation2f& points)
@@ -182,7 +227,8 @@ camera_calibration::fitting_status camera_calibration::try_fit()
 
     // Perform camera calibration
     cv::Mat cameraMatrix, distCoeffs;
-    std::vector<cv::Mat> rvecs, tvecs, stdDeviationsIntrinsics, stdDeviationsExtrinsics, perViewErrors;
+    std::vector<cv::Mat> rvecs, tvecs;
+    cv::Mat stdDeviationsIntrinsics, stdDeviationsExtrinsics, perViewErrors;
 
     std::vector<PointConstellation2f> image_points;
     std::vector<PointConstellation3f> object_world_points_copies;
@@ -195,21 +241,48 @@ camera_calibration::fitting_status camera_calibration::try_fit()
         object_world_points_copies.push_back(calibration_pattern_->corner_3d_coordinates_); // push several copies
     }
 
-    double reprojectionError = cv::calibrateCamera(object_world_points_copies, image_points,
-        image_size_, cameraMatrix,
-        distCoeffs, rvecs, tvecs);// , stdDeviationsIntrinsics, stdDeviationsExtrinsics, perViewErrors);
+    double rms_reprojectionError = cv::calibrateCamera(object_world_points_copies, image_points,
+                                    image_size_, cameraMatrix, distCoeffs, rvecs, tvecs,
+                                    stdDeviationsIntrinsics, stdDeviationsExtrinsics, perViewErrors);
 
-    // Print results
-    // std::cout << "Camera Matrix:\n" << cameraMatrix << std::endl;
-    // std::cout << "Distortion Coefficients:\n" << distCoeffs << std::endl;
-    // std::cout << "Reprojection Error: " << reprojectionError << std::endl;
+#if 0 // Print results
+    std::cout << "RMS error: " << rms_reprojectionError << std::endl;
+    std::cout << "Camera matrix:\n" << cameraMatrix << std::endl;
+    std::cout << "Distortion coefficients:\n" << distCoeffs << std::endl;
+    std::cout << "Standard deviations of intrinsics:\n" << stdDeviationsIntrinsics << std::endl;
+    std::cout << "Standard deviations of extrinsics:\n" << stdDeviationsExtrinsics << std::endl;
+    std::cout << "Per-view errors:\n" << perViewErrors << std::endl;
+#endif
 
-    //double fov_x_degrees = 2 * std::atan(image_size_.width / (2*cameraMatrix.))
+    camera_calibration::camera_model::projection_parameters params;
 
-    //std::cout << "Reprojection Error: " << reprojectionError << std::endl;
+    std::cout << MatTypeInfo::getDepthInfo(distCoeffs) << std::endl;
+
+    // Ensure normalization of last element to 1:
+    cameraMatrix /= e(cameraMatrix, 2, 2);
+
+    params.fx = e(cameraMatrix, 0, 0);
+    params.fy = e(cameraMatrix, 1, 1);
+    params.cx = e(cameraMatrix, 0, 2);
+    params.cy = e(cameraMatrix, 1, 2);
+    params.k1 = e(distCoeffs, 0, 0);
+    params.k2 = e(distCoeffs, 0, 1);
+    params.p1 = e(distCoeffs, 0, 2);
+    params.p2 = e(distCoeffs, 0, 3);
+    params.k3 = e(distCoeffs, 0, 4); // k3 comes after p1 and p2
+
+    params.fx_std = e(stdDeviationsIntrinsics, 0, 0);
+    params.fy_std = e(stdDeviationsIntrinsics, 1, 0);
+    params.cx_std = e(stdDeviationsIntrinsics, 2, 0);
+    params.cy_std = e(stdDeviationsIntrinsics, 3, 0);
+    params.k1_std = e(stdDeviationsIntrinsics, 4, 0);
+    params.k2_std = e(stdDeviationsIntrinsics, 5, 0);
+    params.p1_std = e(stdDeviationsIntrinsics, 6, 0);
+    params.p2_std = e(stdDeviationsIntrinsics, 7, 0);
+    params.k3_std = e(stdDeviationsIntrinsics, 8, 0); // k3 comes after p1 and p2
 
     // TODO: (re)initialize a full camera model, not just image size and camera matrix!
-    last_fitted_model_ = std::make_unique<camera_calibration::camera_model>(image_size_, cameraMatrix);
+    last_fitted_model_ = std::make_unique<camera_calibration::camera_model>(rms_reprojectionError, image_size_, params);
     return fitting_status::newly_fitted_camera_model;
 }
 
@@ -220,8 +293,7 @@ camera_calibration::camera_model camera_calibration::extract_model()
         throw std::runtime_error("Model is not available");
     }
 
-    throw std::logic_error("Not yet implemented");
-    //return last_fitted_model_;
+    return *last_fitted_model_;
 }
 
 cv::Mat camera_calibration::render_feedback_image(bool flip_horizontally)
@@ -314,8 +386,19 @@ void camera_calibration::flat_chessboard_pattern::generate_corner_3d_coordinates
 
 std::ostream& operator<<(std::ostream& os, const camera_calibration::camera_model& obj)
 {
-	os << "Reproj error RMS: " << obj.reprojection_error_rms_;
-	return os; // Return the stream for chaining
+    std::cout.imbue(std::locale(""));
+    os << "Reproj error RMS: " << obj.reprojection_error_rms_ << " [pixels]" << std::endl;
+    os << "Image size: " << obj.image_size_.width << " X " << obj.image_size_.height << " [pixels]" << std::endl;
+    os << "Focal length (fx, fy): (" << obj.projection_parameters_.fx << ", " << obj.projection_parameters_.fy << ")" << " [pixels]" << std::endl;
+    os << "Focal length 3*std.dev(fx, fy): (" << 3.0 * obj.projection_parameters_.fx_std << ", " << 3.0 * obj.projection_parameters_.fy_std << ")" << " [pixels]" << std::endl;
+    os << "Optical Center (cx, cy): (" << obj.projection_parameters_.cx << ", " << obj.projection_parameters_.cy << ")" << " [pixels]" << std::endl;
+    os << "Optical Center 3*std.dev(cx, cy): (" << 3.0 * obj.projection_parameters_.cx_std << ", " << 3.0 * obj.projection_parameters_.cy_std << ")" << " [pixels]" << std::endl;
+    os << "Radial lens distort. (k1, k2, k3): (" << obj.projection_parameters_.k1 << ", " << obj.projection_parameters_.k2 << ", " << obj.projection_parameters_.k3 << ")" << std::endl;
+    os << "Radial lens distort. 3*std.dev(k1, k2, k3): (" << obj.projection_parameters_.k1_std << ", " << obj.projection_parameters_.k2_std << ", " << obj.projection_parameters_.k3_std << ")" << std::endl;
+    os << "Tangent. lens distort. (p1, p2): (" << obj.projection_parameters_.p1 << ", " << obj.projection_parameters_.p2 << ")" << std::endl;
+    os << "Tangent. lens distort. 3*std.dev(p1, p2): (" << 3.0 * obj.projection_parameters_.p1_std << ", " << 3.0 * obj.projection_parameters_.p2_std << ")" << std::endl;
+
+    return os; // Return the stream for chaining
 }
 
 camera_calibration::flat_chessboard_pattern::flat_chessboard_pattern(float square_side_length_mm, cv::Size pattern_size)
@@ -455,16 +538,10 @@ bool camera_calibration::save_registered_images_to_folder(std::filesystem::path 
     return true;
 }
 
-camera_calibration::camera_model::camera_model(cv::Size image_size, cv::Mat camera_matrix_K)
-    : image_size_{ image_size }
-    , camera_matrix_K_{ camera_matrix_K }
-{
-}
 
-camera_calibration::camera_model::camera_model(double reprojection_error_rms, cv::Size image_size, cv::Mat camera_matrix_K, cv::Mat distortion_coefficients)
+camera_calibration::camera_model::camera_model(double reprojection_error_rms, cv::Size image_size, const projection_parameters &params)
     : reprojection_error_rms_{reprojection_error_rms}
     , image_size_{image_size}
-    , camera_matrix_K_{camera_matrix_K}
-    , distortion_coefficients_{distortion_coefficients}
+    , projection_parameters_{params}
 {
 }

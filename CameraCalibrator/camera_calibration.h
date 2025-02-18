@@ -20,8 +20,8 @@ public:
 		undefined,
         pattern_not_configured,
 		pattern_not_found,				// pattern couldn't be found in the provided image or videoframe
-		pattern_too_similar,			// pattern was found, but its pose deemed similar to one of the poses already registered, hence rejected
-		pattern_not_held_long_enough,	// in case of video, user must hold the pattern in the same position for a min of seconds in order to register it
+        pattern_too_similar,			// pattern was found, but its pose deemed similar to one of the poses already registered, hence rejected
+        pattern_not_held_long_enough,	// in case of video, user must hold the pattern in the same position for a min of seconds in order to register it
 		pattern_accepted
 	};
 
@@ -30,7 +30,7 @@ public:
 	{
 		undefined,
 		not_enough_registered_images,
-		same_previous_model,			// fitting was not retried, because current model already was fitted to the latest data
+        same_previous_model,			// fitting was not retried, because current model already was fitted to the latest data
 		newly_fitted_camera_model,
         fitting_unsuccessful,			// e.g., due to bad numerical convergence // if previously fitted model exists, it is kept
 	};
@@ -38,7 +38,7 @@ public:
 	class flat_chessboard_pattern
 	{
 	public:
-		flat_chessboard_pattern(float square_side_length_mm, cv::Size pattern_size);
+        flat_chessboard_pattern(float square_side_length_mm, cv::Size pattern_size);
         bool isValid();
 		friend class camera_calibration;
 	private:
@@ -58,17 +58,23 @@ public:
 	class camera_model
 	{
 	public:
-		camera_model(cv::Size image_size, cv::Mat camera_matrix_K); // minimal case
-		camera_model(double reprojection_error_rms, cv::Size image_size, cv::Mat camera_matrix_K, cv::Mat distortion_coefficients);
+        struct projection_parameters
+        {
+            double fx{}, fy{}, cx{}, cy{}, k1{}, k2{}, k3{}, p1{}, p2{};
+            double fx_std{}, fy_std{}, cx_std{}, cy_std{};
+            double k1_std{}, k2_std{}, k3_std{}, p1_std{}, p2_std{};
 
-		friend std::ostream& operator<<(std::ostream& os, const camera_calibration::camera_model& obj);
-	private:
-		double reprojection_error_rms_{ 0.0 };
+            projection_parameters& operator=(const projection_parameters&) = default;
+        };
+
+        camera_model(double reprojection_error_rms, cv::Size image_size, const projection_parameters& params);
+        camera_model& operator=(const camera_model&) = default;
+        friend std::ostream& operator<<(std::ostream& os, const camera_calibration::camera_model& obj);
+
+    private:
+        double reprojection_error_rms_;
 		cv::Size image_size_;
-		cv::Mat camera_matrix_K_;
-		cv::Mat distortion_coefficients_;
-		std::vector<cv::Mat> rotation_vectors_;
-		std::vector<cv::Mat> translation_vectors_;
+        projection_parameters projection_parameters_;
 	};
 
 	// Remember that Fast Check erroneously fails with high distortions like fisheye.
@@ -78,7 +84,7 @@ public:
 
     void initialize_class();
     camera_calibration();
-	camera_calibration(float square_side_length_mm, cv::Size pattern_size, cv::Size image_size, bool input_image_folder_mode = false);
+    camera_calibration(float square_side_length_mm, cv::Size pattern_size, cv::Size image_size, bool input_image_folder_mode = false);
 
     float square_side_length_mm();
     cv::Size pattern_size();
@@ -97,17 +103,17 @@ public:
 	std::vector<PointConstellation2f> get_pattern_registration_hulls();
     size_t get_total_registered_patterns();
 
-	static double constellation_IoU(const camera_calibration::PointConstellation2f& constellation_a, const camera_calibration::PointConstellation2f& constellation_b);
-	static double convex_polygons_IoU(const camera_calibration::PointConstellation2f& polygon_a, const camera_calibration::PointConstellation2f& polygon_b);
-	friend std::ostream& operator<<(std::ostream& os, const camera_calibration::camera_model& obj);
+    static double constellation_IoU(const camera_calibration::PointConstellation2f& constellation_a, const camera_calibration::PointConstellation2f& constellation_b);
+    static double convex_polygons_IoU(const camera_calibration::PointConstellation2f& polygon_a, const camera_calibration::PointConstellation2f& polygon_b);
+    friend std::ostream& operator<<(std::ostream& os, const camera_calibration::camera_model& obj);
 
 	bool save_registered_images_to_folder(std::filesystem::path path);
 
 private:
 	bool input_image_folder_mode_{ false }; // mode is either input video or image folder
 	bool is_different_enough(const PointConstellation2f& constellation);
-	bool add_constellation(cv::Mat input_image_bgr, camera_calibration::PointConstellation2f constellation);
-	PointConstellation2f flip_horizontally(int image_width, const camera_calibration::PointConstellation2f& points);
+    bool add_constellation(cv::Mat input_image_bgr, camera_calibration::PointConstellation2f constellation);
+    PointConstellation2f flip_horizontally(int image_width, const camera_calibration::PointConstellation2f& points);
 	void generate_colormap(int total_colors = 32);
 
 	std::unique_ptr<flat_chessboard_pattern> calibration_pattern_;
@@ -119,7 +125,7 @@ private:
 	// These are just for real-time visual feedback to the user
 	std::vector<cv::Vec3b> colormap_;
 	cv::Mat last_input_videoframe;
-	PointConstellation2f anchor_corners, last_detected_pattern_corners_videoframe;
+    PointConstellation2f anchor_corners, last_detected_pattern_corners_videoframe;
 	std::chrono::steady_clock::time_point frame_new_pose_start_time;
 
 };
