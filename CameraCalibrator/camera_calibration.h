@@ -9,8 +9,10 @@ class camera_calibration
 {
 public:
 
-	typedef std::vector<cv::Point2f> PointConstellation2f;
-	typedef std::vector<cv::Point3f> PointConstellation3f;
+    typedef std::vector<cv::Point2i> PointConstellation2i;
+    typedef std::vector<cv::Point3i> PointConstellation3i;
+    typedef std::vector<cv::Point2f> PointConstellation2f;
+    typedef std::vector<cv::Point3f> PointConstellation3f;
 
     // Remember to keep in sync with corresponding enums inside CalibrationProcessor middleware class!
 	enum class pattern_status

@@ -238,32 +238,41 @@ cv::Mat camera_calibration::render_feedback_image(bool flip_horizontally)
         cv::Vec3b random_color = colormap_.at(random_idx);
 
         const PointConstellation2f& hull = pattern_registrations_[i].pattern_corners_convex_hull;
-        std::vector<cv::Point2i> hull_integers;
+        const PointConstellation2f& inner_corners = pattern_registrations_[i].pattern_corners;
+        PointConstellation2i hull_integers, inner_corners_integers;
+
         hull_integers.reserve(hull.size());
+        inner_corners_integers.reserve(inner_corners.size());
+
+        for (size_t j = 0; j < inner_corners.size(); j++)
+        {
+            inner_corners_integers.push_back(cv::Point2i{ inner_corners[j] });
+        }
 
         for (size_t j = 0; j < hull.size(); j++)
         {
             hull_integers.push_back(cv::Point2i{ hull[j] });
         }
 
-        // Create a temporary overlay image
-        cv::Mat overlay = output.clone();
+        cv::polylines(output, hull_integers, true, random_color, 5);
 
-        // Draw the polygon on the overlay image
-        cv::fillConvexPoly(overlay, hull_integers, random_color);
+        for (size_t j = 0; j < inner_corners_integers.size(); ++j)
+        {
+            cv::circle(output, inner_corners_integers[j], 2, random_color, 3);
+        }
 
-        double alpha = 0.5;
-
-        // Blend the overlay with the original image using alpha blending
-        cv::addWeighted(overlay, alpha, output, 1.0 - alpha, 0.0, output);
     }
 
-    cv::flip(output, output, 1);
+    PointConstellation2f&  corners = last_detected_pattern_corners_videoframe;
 
-    PointConstellation2f flipped_corners = camera_calibration::flip_horizontally(last_input_videoframe.cols, last_detected_pattern_corners_videoframe);
+    if (flip_horizontally)
+    {
+        cv::flip(output, output, 1);
+        corners = camera_calibration::flip_horizontally(last_input_videoframe.cols, last_detected_pattern_corners_videoframe);
+    }
 
     if(calibration_pattern_)
-        drawChessboardCorners(output, calibration_pattern_->size_, flipped_corners, true);
+        drawChessboardCorners(output, calibration_pattern_->size_, corners, true);
 
     return output;
 }
