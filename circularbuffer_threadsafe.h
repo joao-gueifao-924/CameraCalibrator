@@ -22,13 +22,15 @@ public:
         // manual unlocking is done before notifying, to avoid waking up
         // the waiting thread only to block again (see notify_one for details)
         lock.unlock();
-        non_empty_condition_.notify_one();
+        waiting_condition_.notify_one();
     }
 
-    bool try_pop(T& item)
+    bool pop(T& item)
     {
         unilock_mutex lock(door_);
-        if (is_empty()) return false;
+        waiting_condition_.wait(lock, [this]() { return !buffer_.empty() || !should_wait_to_pop_; });
+
+        if (buffer_.empty()) return false;
 
         item = buffer_.front();
         buffer_.pop_front();
@@ -36,23 +38,10 @@ public:
         return true;
     }
 
-    bool wait_pop(T& item)
+    void should_wait_to_pop(bool val)
     {
-        unilock_mutex lock(door_);
-        non_empty_condition_.wait(lock, [this]() { return !buffer_.empty() || stop_waiting_to_pop_; });
-
-        if (stop_waiting_to_pop_) return false;
-
-        item = buffer_.front();
-        buffer_.pop_front();
-
-        return true;
-    }
-
-    void stop_waiting_to_pop()
-    {
-        stop_waiting_to_pop_ = true;
-        non_empty_condition_.notify_one();
+        should_wait_to_pop_ = val;
+        waiting_condition_.notify_one();
     }
 
     bool is_empty() { return buffer_.empty(); }
@@ -60,8 +49,8 @@ public:
 private:
     boost::circular_buffer<T> buffer_;
     std::mutex door_;
-    std::condition_variable non_empty_condition_;
-    std::atomic<bool> stop_waiting_to_pop_{ false };
+    std::condition_variable waiting_condition_;
+    std::atomic<bool> should_wait_to_pop_{ true };
 };
 
 #endif // CIRCULARBUFFER_THREADSAFE_H

@@ -14,23 +14,95 @@ std::chrono::microseconds convertToTimePeriod(double fps)
     return std::chrono::microseconds(static_cast<long long>(1e6 / fps));
 }
 
+// internal helper method
+
+void sleep(long long millisec)
+{
+    std::this_thread::sleep_for(std::chrono::milliseconds(millisec));
+}
+
 void CalibrationProcessor::processFrames() {
 
-    while (!m_should_stop)
+    cv::Mat ocv_image;
+    cv::Mat presentation_frame;
+
+    auto presentOutputFrame = [this, &presentation_frame]() {
+        if (m_outputVideoSink && !presentation_frame.empty())
+        {
+            QImage outImage(presentation_frame.data,
+                            presentation_frame.cols,
+                            presentation_frame.rows,
+                            presentation_frame.step,
+                            QImage::Format_BGR888);
+            QVideoFrame outFrame(outImage.copy());
+            m_outputVideoSink->setVideoFrame(outFrame);
+        }
+    };
+
+    while (!m_should_stop_processing_frames)
     {
-        QImage image;
-        if (!m_inputImagesBuffer.wait_pop(image)) return;
-        cv::Mat ocv_image(image.height(), image.width(), CV_8UC4, image.bits());
-        cv::cvtColor(ocv_image, ocv_image, cv::COLOR_RGBA2BGR);
+        if (imageInputFolderMode_)
+        {
+            if (imageInputFolder_.empty())
+            {
+                // very ugly, but I am in a rush to make this app feature-complete...
+                sleep(30);
+                continue;
+            }
 
-        camera_calibration_->set_image_size(ocv_image.size());
+            // TODO: I need to set a list of image files, then each iteration of the
+            // big while-loop targets each image in the list.
 
-        cv::Mat presentation_frame = singleImageIteration(ocv_image);
+            // Extracting path of individual image stored in a given directory
+            std::vector<cv::String> images;
 
-        if (!m_outputVideoSink) return;
-        QImage outImage(presentation_frame.data, presentation_frame.cols, presentation_frame.rows, presentation_frame.step, QImage::Format_BGR888);
-        QVideoFrame outFrame(outImage.copy()); // create a deep copy to ensure data ownership elsewhere
-        m_outputVideoSink->setVideoFrame(outFrame);
+            // TODO: accept other kinds of image files, not just PNG.
+            // Path of the folder containing checkerboard images
+            std::string path = imageInputFolder_.string() + "/*.png";
+            //std::string path = R"(C:\Users\joaog\temp_program_output\CameraCalibrator\*.png)";
+            cv::glob(path, images);
+
+            // Looping over all the images in the directory
+            for (int i{ 0 }; i < images.size(); i++)
+            {
+                ocv_image = cv::imread(images[i]);
+                camera_calibration_->set_image_size(ocv_image.size());
+                presentation_frame = singleImageIteration(ocv_image);
+
+                presentOutputFrame();
+            }
+
+
+            // TODO: this is quick and ugly, for obvious reasons...
+            // For now, I need to clear the image input folder so that the images are not read
+            // and processed over and over indefinitely.
+            setImageInputFolder("");
+            setReadyToSaveCalibration(camera_calibration_->is_model_available());
+        }
+        else // Live video input mode
+        {
+            QImage image;
+            if (!m_inputVideoFramesBuffer.pop(image))
+            {
+                // Avoid CPU spiking in case frames buffer is currently set to not wait to be popped.
+                sleep(30);
+                continue;
+            }
+            ocv_image = cv::Mat(image.height(), image.width(), CV_8UC4, image.bits());
+            cv::cvtColor(ocv_image, ocv_image, cv::COLOR_RGBA2BGR);
+            camera_calibration_->set_image_size(ocv_image.size());
+            presentation_frame = singleImageIteration(ocv_image);
+            setReadyToSaveCalibration(camera_calibration_->is_model_available());
+        }
+
+        // if (m_outputVideoSink)
+        // {
+        //     QImage outImage(presentation_frame.data, presentation_frame.cols, presentation_frame.rows, presentation_frame.step, QImage::Format_BGR888);
+        //     QVideoFrame outFrame(outImage.copy()); // create a deep copy to ensure data ownership elsewhere
+        //     m_outputVideoSink->setVideoFrame(outFrame);
+        // }
+
+        presentOutputFrame();
     }
 }
 
@@ -41,6 +113,21 @@ void CalibrationProcessor::set_fitting_status(camera_calibration::fitting_status
     fitting_status_.store(qstatus);
     emit fitting_statusChanged();
 }
+
+void CalibrationProcessor::setTotalRegisteredPatterns(int val)
+{
+    if (val == totalRegisteredPatterns_) return;
+    totalRegisteredPatterns_ = val;
+    emit totalRegisteredPatternsChanged();
+}
+
+void CalibrationProcessor::setReadyToSaveCalibration(bool val)
+{
+    if (readyToSaveCalibration_ == val) return;
+    readyToSaveCalibration_ = val;
+    emit readyToSaveCalibrationChanged();
+}
+
 
 void CalibrationProcessor::set_pattern_status(camera_calibration::pattern_status status)
 {
@@ -91,7 +178,7 @@ CalibrationProcessor::pattern_status CalibrationProcessor::toQtEnum(camera_calib
 CalibrationProcessor::CalibrationProcessor(QObject *parent)
     : QObject(parent)
     , camera_calibration_{ std::make_unique<camera_calibration>() }
-    , m_inputImagesBuffer{ circular_buffer_thread_safe<QImage>(FRAME_BUFFER_CAPACITY) }
+    , m_inputVideoFramesBuffer{ circular_buffer_thread_safe<QImage>(FRAME_BUFFER_CAPACITY) }
     //, m_output_videoframes_buffer{ circular_buffer_thread_safe<QVideoFrame>(FRAME_BUFFER_CAPACITY) }
     , m_imageProcessingThread{ std::thread(&CalibrationProcessor::processFrames, this) }
     , m_lastFrameTime{ sclock::now() }
@@ -101,8 +188,8 @@ CalibrationProcessor::CalibrationProcessor(QObject *parent)
 
 CalibrationProcessor::~CalibrationProcessor()
 {
-    m_should_stop = true;
-    m_inputImagesBuffer.stop_waiting_to_pop(); // in case actively held on wait_pop() call
+    m_should_stop_processing_frames = true;
+    m_inputVideoFramesBuffer.should_wait_to_pop(false); // in case actively held on wait_pop() call
 
     if (m_imageProcessingThread.joinable())
     {
@@ -199,6 +286,50 @@ void CalibrationProcessor::setPattern_size(QSize val)
     emit pattern_sizeChanged();
 }
 
+bool CalibrationProcessor::getImageInputFolderMode()
+{
+    return imageInputFolderMode_;
+}
+
+void CalibrationProcessor::setImageInputFolderMode(bool val)
+{
+    if (imageInputFolderMode_ == val) return;
+    imageInputFolderMode_ = val;
+
+    camera_calibration_->set_input_image_folder_mode(val);
+
+    // TODO: improve this.
+    // Right now, we need to have processFrames() stop waiting
+    // to pop next video frame from the buffer whenever we
+    // activate imageInputFolderMode_ and do the contrary otherwise.
+    m_inputVideoFramesBuffer.should_wait_to_pop(!imageInputFolderMode_); // in case actively held on wait_pop() call
+
+    emit imageInputFolderModeChanged();
+}
+
+QString CalibrationProcessor::getImageInputFolder()
+{
+    return QString::fromStdString(imageInputFolder_.string());
+}
+
+void CalibrationProcessor::setImageInputFolder(QString val)
+{
+    const std::filesystem::path valpath = std::filesystem::path(val.toStdString());
+    if (valpath == imageInputFolder_) return;
+    imageInputFolder_ = valpath;
+    emit imageInputFolderChanged();
+}
+
+int CalibrationProcessor::totalRegisteredPatterns()
+{
+    return totalRegisteredPatterns_;
+}
+
+bool CalibrationProcessor::readyToSaveCalibration()
+{
+    return readyToSaveCalibration_;
+}
+
 CalibrationProcessor::pattern_status CalibrationProcessor::get_pattern_status()
 {
     return pattern_status_.load();
@@ -215,7 +346,7 @@ void CalibrationProcessor::receiveFrame(const QVideoFrame &frame)
 
     if (workTime >= m_targetFrameTime_microsec)
     {
-        m_inputImagesBuffer.push(frame.toImage());
+        m_inputVideoFramesBuffer.push(frame.toImage());
         m_lastFrameTime = sclock::now();
     }
 }
@@ -234,6 +365,8 @@ cv::Mat CalibrationProcessor::singleImageIteration(cv::Mat image_bgr)
 
     auto pattern_status = camera_calibration_->try_register(image_bgr);
     set_pattern_status(pattern_status);
+
+    setTotalRegisteredPatterns( static_cast<int>(camera_calibration_->get_total_registered_patterns() ) );
 
     cv::Mat presentation_frame = camera_calibration_->render_feedback_image(true);
     //cv::imshow("INPUT_IMAGE_WINDOW_TITLE", presentation_frame);

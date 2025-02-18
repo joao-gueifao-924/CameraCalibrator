@@ -6,6 +6,7 @@
 #include <QQmlEngine>
 #include "circularbuffer_threadsafe.h"
 #include "CameraCalibrator/camera_calibration.h"
+#include <filesystem>
 
 class CalibrationProcessor : public QObject
 {
@@ -87,6 +88,10 @@ public:
     Q_PROPERTY(QSize pattern_size READ pattern_size WRITE setPattern_size NOTIFY pattern_sizeChanged);
     Q_PROPERTY(fitting_status fittingStatus READ get_fitting_status NOTIFY fitting_statusChanged);
     Q_PROPERTY(pattern_status patternStatus READ get_pattern_status NOTIFY pattern_statusChanged);
+    Q_PROPERTY(bool imageInputFolderMode READ getImageInputFolderMode WRITE setImageInputFolderMode NOTIFY imageInputFolderModeChanged);
+    Q_PROPERTY(QString imageInputFolder READ getImageInputFolder WRITE setImageInputFolder NOTIFY imageInputFolderChanged);
+    Q_PROPERTY(int totalRegisteredPatterns READ totalRegisteredPatterns NOTIFY totalRegisteredPatternsChanged);
+    Q_PROPERTY(bool readyToSaveCalibration READ readyToSaveCalibration NOTIFY readyToSaveCalibrationChanged);
 
 public:
     static constexpr double DEFAULT_MAX_FRAME_RATE = 30.0;
@@ -107,6 +112,12 @@ public:
 
     fitting_status get_fitting_status();
     pattern_status get_pattern_status();
+    bool getImageInputFolderMode();
+    void setImageInputFolderMode(bool val);
+    QString getImageInputFolder();
+    void setImageInputFolder(QString val);
+    int totalRegisteredPatterns();
+    bool readyToSaveCalibration();
 
 
 signals:
@@ -117,6 +128,10 @@ signals:
     void pattern_sizeChanged();
     void fitting_statusChanged();
     void pattern_statusChanged();
+    void imageInputFolderModeChanged();
+    void imageInputFolderChanged();
+    void totalRegisteredPatternsChanged();
+    void readyToSaveCalibrationChanged();
 
 private slots:
     void receiveFrame(const QVideoFrame &frame);
@@ -124,20 +139,25 @@ private slots:
 private:
     cv::Mat singleImageIteration(cv::Mat image_bgr);
     void processFrames();
-    void initConsumerThread();
     pattern_status toQtEnum(camera_calibration::pattern_status val);
     fitting_status toQtEnum(camera_calibration::fitting_status val);
 
     void set_fitting_status(camera_calibration::fitting_status status);
     void set_pattern_status(camera_calibration::pattern_status status);
+    void setTotalRegisteredPatterns(int val);
+    void setReadyToSaveCalibration(bool val);
 
     std::unique_ptr<camera_calibration> camera_calibration_;
-    circular_buffer_thread_safe<QImage> m_inputImagesBuffer;
+    circular_buffer_thread_safe<QImage> m_inputVideoFramesBuffer;
     std::shared_ptr<QVideoSink> m_inputVideoSink, m_outputVideoSink;
     std::thread m_imageProcessingThread;
-    std::atomic<bool> m_should_stop{ false };
+    std::atomic<bool> m_should_stop_processing_frames{ false };
     std::chrono::steady_clock::time_point m_lastFrameTime;
     std::chrono::microseconds m_targetFrameTime_microsec;
     std::atomic<pattern_status> pattern_status_{ pattern_status::Undefined };
     std::atomic<fitting_status> fitting_status_{ fitting_status::Undefined };
+    std::atomic<bool> imageInputFolderMode_{ false };
+    std::filesystem::path imageInputFolder_;
+    std::atomic<int> totalRegisteredPatterns_{ 0 };
+    std::atomic<bool> readyToSaveCalibration_{false};
 };

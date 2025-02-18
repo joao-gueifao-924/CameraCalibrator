@@ -99,6 +99,11 @@ void camera_calibration::set_input_image_folder_mode(bool value)
     input_image_folder_mode_ = value;
 }
 
+bool camera_calibration::is_model_available()
+{
+    return (last_fitted_model_ != nullptr);
+}
+
 camera_calibration::pattern_status camera_calibration::try_register(cv::Mat frame_bgr)
 {
     using namespace std;
@@ -203,11 +208,18 @@ camera_calibration::fitting_status camera_calibration::try_fit()
 
     //std::cout << "Reprojection Error: " << reprojectionError << std::endl;
 
+    // TODO: (re)initialize a full camera model, not just image size and camera matrix!
+    last_fitted_model_ = std::make_unique<camera_calibration::camera_model>(image_size_, cameraMatrix);
     return fitting_status::newly_fitted_camera_model;
 }
 
 camera_calibration::camera_model camera_calibration::extract_model()
 {
+    if (!is_model_available())
+    {
+        throw std::runtime_error("Model is not available");
+    }
+
     throw std::logic_error("Not yet implemented");
     //return last_fitted_model_;
 }
@@ -254,6 +266,11 @@ cv::Mat camera_calibration::render_feedback_image(bool flip_horizontally)
         drawChessboardCorners(output, calibration_pattern_->size_, flipped_corners, true);
 
     return output;
+}
+
+size_t camera_calibration::get_total_registered_patterns()
+{
+    return pattern_registrations_.size();
 }
 
 camera_calibration::PointConstellation2f camera_calibration::get_currently_detected_pattern_hull()

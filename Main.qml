@@ -11,13 +11,13 @@ ApplicationWindow {
     title: "Camera Calibrator"
     Universal.theme: Universal.System
 
-    // width: 640
-    // height: 480
+    width: minimumWidth
+    height: minimumHeight
     visible: true
     minimumWidth: 853
     minimumHeight: 480
-    //visibility: Window.Maximized
 
+    property url calibrationSaveFolder: "";
 
     // Background that will clear focus when clicked on
     Item {
@@ -47,81 +47,96 @@ ApplicationWindow {
                 spacing: 10
                 // Add your menu items here
 
-                Column {
-                    spacing: 10
+                ColumnLayout {
+                    id: calibrationInputParamsGroup
+                    enabled: calibrationProcessor.allowChangingInputParameters
+                    Column {
+                        spacing: 10
 
-                    ButtonGroup {
-                        id: modeGroup
-                        exclusive: true
+                        ButtonGroup {
+                            id: modeGroup
+                            exclusive: true
+                        }
+
+                        RadioButton {
+                            id: liveVideoModeRadioButton
+                            text: "Live Video Mode"
+                            checked: false
+                            ButtonGroup.group: modeGroup
+                        }
+
+                        RadioButton {
+                            id: imageFolderModeRadioButton
+                            text: "Image Folder Mode"
+                            checked: false
+                            ButtonGroup.group: modeGroup
+                            onCheckedChanged: calibrationProcessor.imageInputFolderMode = imageFolderModeRadioButton.checked
+                        }
                     }
 
-                    RadioButton {
-                        id: liveVideoModeRadioButton
-                        text: "Live Video Mode"
-                        checked: false
-                        ButtonGroup.group: modeGroup
+                    ComboBox {
+                        id: cbCamera
+                        Layout.minimumWidth: 200
+                        visible: liveVideoModeRadioButton.checked
+                        model: mediaDevices.videoInputs
+                        textRole: "description"
                     }
 
-                    RadioButton {
-                        id: imageFolderModeRadioButton
-                        text: "Image Folder Mode"
-                        checked: false
-                        ButtonGroup.group: modeGroup
-                    }
-                }
-
-                ComboBox {
-                    id: cbCamera
-                    Layout.minimumWidth: 200
-                    visible: liveVideoModeRadioButton.checked
-                    model: mediaDevices.videoInputs
-                    textRole: "description"
-                }
-
-                Button {
-                    id: selectFolderButton
-                    text: "Open Folder..."
-                    visible: imageFolderModeRadioButton.checked
-                    Layout.fillWidth: true
-                    onClicked: inputImageFolderDialog.open()
-                }
-
-                Label {
-                    text: "Square side length (mm)"
-                }
-
-                NumberField
-                {
-                    id: squareSideLengthNumberField
-                    decimals: 2
-                    value: 14.88
-                    Layout.preferredWidth: 150
-                }
-
-                Label {
-                    text: "Total corners wide x tall"
-                }
-
-                RowLayout
-                {
-                    NumberField
-                    {
-                        id: patternCornersWideNumberField
-                        decimals: 0
-                        value: 10
-                        width: 300
+                    Button {
+                        id: selectFolderButton
+                        text: "Select Folder..."
+                        visible: imageFolderModeRadioButton.checked
+                        Layout.fillWidth: true
+                        onClicked: inputImageFolderDialog.open()
                     }
 
                     Label {
-                        text: "X"
+                        text: "Square side length (mm)"
                     }
 
                     NumberField
                     {
-                        id: patternCornersTallNumberField
-                        decimals: 0
-                        value: 6
+                        id: squareSideLengthNumberField
+                        decimals: 2
+                        value: 14.88
+                        Layout.preferredWidth: 150
                     }
+
+                    Label {
+                        text: "Total corners wide x tall"
+                    }
+
+                    RowLayout
+                    {
+                        NumberField
+                        {
+                            id: patternCornersWideNumberField
+                            decimals: 0
+                            value: 10
+                            width: 300
+                        }
+
+                        Label {
+                            text: "X"
+                        }
+
+                        NumberField
+                        {
+                            id: patternCornersTallNumberField
+                            decimals: 0
+                            value: 6
+                        }
+                    }
+                }
+
+
+
+                Button {
+                    id: saveCalibrationButton
+                    text: "Save Calibration..."
+                    enabled: calibrationProcessor.readyToSaveCalibration
+                    Layout.fillWidth: true
+                    onClicked: saveCalibrationFileDialog.open()
                 }
             }
         }
@@ -147,14 +162,18 @@ ApplicationWindow {
 
                 VideoOutput {
                     id: inputCameraFeed_videoOutput
-                    visible: false // this is a hack, I need to learn how to avoid a intermediary video output
+                    visible: false // this is a hack, I need to learn how to avoid this intermediary video output
                     Component.onCompleted:
                        calibrationProcessor.inputVideoSink = inputCameraFeed_videoOutput.videoSink
                 }
 
                 VideoOutput {
                     id: processedVideo_videoOutput
-                    visible: liveVideoModeRadioButton.checked
+                    // TODO: Use a proper image viewer when doing camera calibration with images instead of live video
+                    // For now we're using VideoOuptut for both.
+                    visible: calibrationProcessor.imageInputFolderMode
+                                ? (calibrationProcessor.imageInputFolder.length > 0 || calibrationProcessor.totalRegisteredPatterns > 0)
+                                : true
                     anchors.centerIn: parent
                     width: parent.width
                     height: parent.height
@@ -165,9 +184,26 @@ ApplicationWindow {
             }
 
 
+            Rectangle {
+                id: topPanelBeneathVideoOutput
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 25
+                Layout.maximumHeight: 25
+                color: palette.window
+                visible: calibrationProcessor.imageInputFolderMode // imageInputFolderPathText.text.length > 0
+
+                Text {
+                    id: imageInputFolderPathText
+                    color: palette.text
+                    text: calibrationProcessor.imageInputFolder.length > 0
+                          ? calibrationProcessor.imageInputFolder
+                          : "Select the folder with images to be processed..."
+                }
+            }
 
             Rectangle {
-                id: panelBeneathVideoOutput
+                id: bottomPanelBeneathVideoOutput
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.minimumHeight: 25
@@ -204,7 +240,30 @@ ApplicationWindow {
         title: "Please choose a folder with your images"
 
         onAccepted: {
-            console.log("Selected folder:", selectedFolder)
+            // Fix for Windows paths with "file:///" prefix:
+            calibrationSaveFolder = selectedFolder
+            console.log(calibrationSaveFolder)
+            const folderpath = new URL(selectedFolder).pathname
+            const folderPathNoPrefix = folderpath.replace(/^\/([A-Za-z]:\/)/, '$1')
+            calibrationProcessor.imageInputFolder = folderPathNoPrefix
+        }
+    }
+
+    FileDialog {
+        id: saveCalibrationFileDialog
+        title: "Save Calibration File"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "json"
+        nameFilters: ["JSON files (*.json)"]
+        currentFolder: calibrationSaveFolder
+
+        onAccepted: {
+            // Handle the selected file
+            // selectedFile contains the chosen file URL
+            saveTextData(selectedFile)
+        }
+        onRejected: {
+            console.log("Save dialog canceled")
         }
     }
 
@@ -239,5 +298,6 @@ ApplicationWindow {
 
         readonly property string fittingResultString: getFittingStatusQString(fittingStatus)
         readonly property string patternResultString: getPatternStatusQString(patternStatus)
+        readonly property bool allowChangingInputParameters: totalRegisteredPatterns == 0
     }
 }

@@ -88,10 +88,12 @@ public:
 
     pattern_status try_register(cv::Mat frame_bgr);
 	fitting_status try_fit();
-	camera_model extract_model();
+    camera_model extract_model();
+    bool is_model_available();
 	cv::Mat render_feedback_image(bool flip_horizontally = false);
 	PointConstellation2f get_currently_detected_pattern_hull();
 	std::vector<PointConstellation2f> get_pattern_registration_hulls();
+    size_t get_total_registered_patterns();
 
 	static double constellation_IoU(const camera_calibration::PointConstellation2f& constellation_a, const camera_calibration::PointConstellation2f& constellation_b);
 	static double convex_polygons_IoU(const camera_calibration::PointConstellation2f& polygon_a, const camera_calibration::PointConstellation2f& polygon_b);
