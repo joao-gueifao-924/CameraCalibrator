@@ -119,6 +119,7 @@ public:
     int totalRegisteredPatterns();
     bool readyToSaveCalibration();
 
+    Q_INVOKABLE bool saveCameraModelJson(QString filePath);
 
 signals:
     void maxFrameRateChanged();

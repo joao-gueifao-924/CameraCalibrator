@@ -19,10 +19,10 @@ public:
 	{
 		undefined,
         pattern_not_configured,
-		pattern_not_found,				// pattern couldn't be found in the provided image or videoframe
-        pattern_too_similar,			// pattern was found, but its pose deemed similar to one of the poses already registered, hence rejected
-        pattern_not_held_long_enough,	// in case of video, user must hold the pattern in the same position for a min of seconds in order to register it
-		pattern_accepted
+        pattern_not_found,              // pattern couldn't be found in the provided image or videoframe
+        pattern_too_similar,            // pattern was found, but its pose deemed similar to one of the poses already registered, hence rejected
+        pattern_not_held_long_enough,  // in case of video, user must hold the pattern in the same position for a min of seconds in order to register it
+        pattern_accepted
 	};
 
     // Remember to keep in sync with corresponding enums inside CalibrationProcessor middleware class!
@@ -70,6 +70,7 @@ public:
         camera_model(double reprojection_error_rms, cv::Size image_size, const projection_parameters& params);
         camera_model& operator=(const camera_model&) = default;
         friend std::ostream& operator<<(std::ostream& os, const camera_calibration::camera_model& obj);
+        std::string to_json() const;
 
     private:
         double reprojection_error_rms_;

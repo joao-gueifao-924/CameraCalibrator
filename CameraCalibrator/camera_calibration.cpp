@@ -545,3 +545,36 @@ camera_calibration::camera_model::camera_model(double reprojection_error_rms, cv
     , projection_parameters_{params}
 {
 }
+
+std::string camera_calibration::camera_model::to_json() const
+{
+    std::stringstream ss;
+    ss << "{\n"
+       << "  \"reprojection_error_rms\": " << reprojection_error_rms_ << ",\n"
+       << "  \"image_size\": {\n"
+       << "    \"width\": " << image_size_.width << ",\n"
+       << "    \"height\": " << image_size_.height << "\n"
+       << "  },\n"
+       << "  \"projection_parameters\": {\n"
+       << "    \"fx\": " << projection_parameters_.fx << ",\n"
+       << "    \"fy\": " << projection_parameters_.fy << ",\n"
+       << "    \"cx\": " << projection_parameters_.cx << ",\n"
+       << "    \"cy\": " << projection_parameters_.cy << ",\n"
+       << "    \"k1\": " << projection_parameters_.k1 << ",\n"
+       << "    \"k2\": " << projection_parameters_.k2 << ",\n"
+       << "    \"k3\": " << projection_parameters_.k3 << ",\n"
+       << "    \"p1\": " << projection_parameters_.p1 << ",\n"
+       << "    \"p2\": " << projection_parameters_.p2 << ",\n"
+       << "    \"fx_std\": " << projection_parameters_.fx_std << ",\n"
+       << "    \"fy_std\": " << projection_parameters_.fy_std << ",\n"
+       << "    \"cx_std\": " << projection_parameters_.cx_std << ",\n"
+       << "    \"cy_std\": " << projection_parameters_.cy_std << ",\n"
+       << "    \"k1_std\": " << projection_parameters_.k1_std << ",\n"
+       << "    \"k2_std\": " << projection_parameters_.k2_std << ",\n"
+       << "    \"k3_std\": " << projection_parameters_.k3_std << ",\n"
+       << "    \"p1_std\": " << projection_parameters_.p1_std << ",\n"
+       << "    \"p2_std\": " << projection_parameters_.p2_std << "\n"
+       << "  }\n"
+       << "}";
+    return ss.str();
+}

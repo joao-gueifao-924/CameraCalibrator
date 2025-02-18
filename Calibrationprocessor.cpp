@@ -3,6 +3,7 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
+#include <fstream>
 
 static constexpr size_t FRAME_BUFFER_CAPACITY = 3;
 
@@ -322,6 +323,21 @@ int CalibrationProcessor::totalRegisteredPatterns()
 bool CalibrationProcessor::readyToSaveCalibration()
 {
     return readyToSaveCalibration_;
+}
+
+bool CalibrationProcessor::saveCameraModelJson(QString filePath)
+{
+    if (!readyToSaveCalibration_) return false;
+
+    std::ofstream file(filePath.toStdString());
+    if (!file.is_open()) {
+        return false;
+    }
+
+    std::string jsonString = camera_calibration_->extract_model().to_json();
+    file << jsonString;
+    file.close();
+    return true;
 }
 
 CalibrationProcessor::pattern_status CalibrationProcessor::get_pattern_status()

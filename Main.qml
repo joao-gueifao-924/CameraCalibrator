@@ -19,6 +19,14 @@ ApplicationWindow {
 
     property url calibrationSaveFolder: "";
 
+    // Remove "file:///" prefix of paths:
+    function removeFileProtocolPrefix(fileUrl)
+    {
+        const pathname = new URL(fileUrl).pathname
+        const pathnameNoPrefix = pathname.replace(/^\/([A-Za-z]:\/)/, '$1')
+        return pathnameNoPrefix
+    }
+
     // Background that will clear focus when clicked on
     Item {
         id: backgroundStealFocus
@@ -196,9 +204,18 @@ ApplicationWindow {
                 Text {
                     id: imageInputFolderPathText
                     color: palette.text
-                    text: calibrationProcessor.imageInputFolder.length > 0
-                          ? calibrationProcessor.imageInputFolder
-                          : "Select the folder with images to be processed..."
+                    text: {
+                        if (calibrationProcessor.readyToSaveCalibration)
+                        {
+                            "Ready to save calibration model"
+                        }
+                        else
+                        {
+                            calibrationProcessor.imageInputFolder.length > 0
+                              ? calibrationProcessor.imageInputFolder
+                              : "Select the folder with images to be processed..."
+                        }
+                    }
                 }
             }
 
@@ -240,11 +257,8 @@ ApplicationWindow {
         title: "Please choose a folder with your images"
 
         onAccepted: {
-            // Fix for Windows paths with "file:///" prefix:
             calibrationSaveFolder = selectedFolder
-            console.log(calibrationSaveFolder)
-            const folderpath = new URL(selectedFolder).pathname
-            const folderPathNoPrefix = folderpath.replace(/^\/([A-Za-z]:\/)/, '$1')
+            const folderPathNoPrefix = removeFileProtocolPrefix(selectedFolder)
             calibrationProcessor.imageInputFolder = folderPathNoPrefix
         }
     }
@@ -258,12 +272,8 @@ ApplicationWindow {
         currentFolder: calibrationSaveFolder
 
         onAccepted: {
-            // Handle the selected file
-            // selectedFile contains the chosen file URL
-            saveTextData(selectedFile)
-        }
-        onRejected: {
-            console.log("Save dialog canceled")
+            const filePathNoPrefix = removeFileProtocolPrefix(selectedFile)
+            calibrationProcessor.saveCameraModelJson(filePathNoPrefix)
         }
     }
 
