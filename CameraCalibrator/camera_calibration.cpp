@@ -9,7 +9,7 @@
 static constexpr int MIN_SECONDS_HOLD_TO_CHECK_SIMILARITY{ 1 }; // total seconds the user must hold the pattern in place until a check for similarity of pattern pose store is made and feedback message is shown
 static constexpr int MIN_SECONDS_HOLD_TO_ADD{ 3 }; // total seconds the user must hold the pattern in place until a snapshot is taken and detected corners stored
 static constexpr double MIN_PATTERN_HOLD_IOU{ 0.90 };
-static constexpr int MIN_TOTAL_PATTERN_REGISTRATIONS{ 10 };
+static constexpr int MIN_TOTAL_PATTERN_REGISTRATIONS{ 9 };
 double CONSTELLATION_IOU_THRESHOLD{ 0.7 };
 static const cv::Size WINDOW_SEARCH_SIZE{ 11, 11 };
 

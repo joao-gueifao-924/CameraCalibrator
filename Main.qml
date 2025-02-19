@@ -11,11 +11,15 @@ ApplicationWindow {
     title: "Camera Calibrator"
     Universal.theme: Universal.System
 
-    width: minimumWidth
-    height: minimumHeight
+    minimumWidth: sidebarOuterColumnLayout.implicitWidth + 2 * sidebarOuterColumnLayout.anchors.margins + 320
+    minimumHeight: sidebarOuterColumnLayout.implicitHeight + 2 * sidebarOuterColumnLayout.anchors.margins
     visible: true
-    minimumWidth: 853
-    minimumHeight: 480
+
+
+    Component.onCompleted: {
+        width = 853 + sidebar.width + separatorVerticalLine.width
+        height = 480 + topPanelBeneathVideoOutput.height + bottomPanelBeneathVideoOutput.height
+    }
 
     property url calibrationSaveFolder: "";
 
@@ -48,16 +52,22 @@ ApplicationWindow {
         Rectangle {
             id: sidebar
             Layout.fillHeight: true
-            Layout.preferredWidth: 200
+            Layout.preferredWidth: 225
             color: palette.window
 
             ColumnLayout {
+                id: sidebarOuterColumnLayout
                 spacing: 10
-                // Add your menu items here
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: 10
 
                 ColumnLayout {
                     id: calibrationInputParamsGroup
                     enabled: calibrationProcessor.allowChangingInputParameters
+                    Layout.fillWidth: true
+
                     Column {
                         spacing: 10
 
@@ -84,10 +94,12 @@ ApplicationWindow {
 
                     ComboBox {
                         id: cbCamera
-                        Layout.minimumWidth: 200
+                        Layout.fillWidth: true
                         visible: liveVideoModeRadioButton.checked
                         model: mediaDevices.videoInputs
                         textRole: "description"
+                        //popup.width: 400
+                        implicitContentWidthPolicy: ComboBox.WidestText
                     }
 
                     Button {
@@ -107,7 +119,7 @@ ApplicationWindow {
                         id: squareSideLengthNumberField
                         decimals: 2
                         value: 14.88
-                        Layout.preferredWidth: 150
+                        Layout.preferredWidth: 75
                     }
 
                     Label {
@@ -121,7 +133,7 @@ ApplicationWindow {
                             id: patternCornersWideNumberField
                             decimals: 0
                             value: 10
-                            width: 300
+                            Layout.preferredWidth: 50
                         }
 
                         Label {
@@ -133,11 +145,10 @@ ApplicationWindow {
                             id: patternCornersTallNumberField
                             decimals: 0
                             value: 6
+                            Layout.preferredWidth: 50
                         }
                     }
                 }
-
-
 
                 Button {
                     id: saveCalibrationButton
@@ -146,11 +157,20 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     onClicked: saveCalibrationFileDialog.open()
                 }
+
+                Button {
+                    id: restartButton
+                    text: "Restart session"
+                    enabled: !calibrationProcessor.allowChangingInputParameters
+                    Layout.fillWidth: true
+                    onClicked: calibrationProcessor.restartApp()
+                }
             }
         }
 
         // Separator
         Rectangle {
+            id: separatorVerticalLine
             Layout.fillHeight: true
             Layout.preferredWidth: 3
             color: Qt.darker(palette.window) // Uses system theme's dark color for separation
@@ -199,22 +219,44 @@ ApplicationWindow {
                 Layout.minimumHeight: 25
                 Layout.maximumHeight: 25
                 color: palette.window
-                visible: calibrationProcessor.imageInputFolderMode // imageInputFolderPathText.text.length > 0
+                //visible: calibrationProcessor.imageInputFolderMode // imageInputFolderPathText.text.length > 0
 
                 Text {
                     id: imageInputFolderPathText
                     color: palette.text
                     text: {
-                        if (calibrationProcessor.readyToSaveCalibration)
+                        let output = ""
+                        if (!liveVideoModeRadioButton.checked && !imageFolderModeRadioButton.checked)
                         {
-                            "Ready to save calibration model"
+                            return "First, configure your calibration session"
                         }
-                        else
+
+                        if (liveVideoModeRadioButton.checked)
                         {
-                            calibrationProcessor.imageInputFolder.length > 0
-                              ? calibrationProcessor.imageInputFolder
-                              : "Select the folder with images to be processed..."
+                            if (calibrationProcessor.readyToSaveCalibration)
+                                return "Save calibration model now or keep registering more pattern poses for potential improvement"
+                            if (calibrationProcessor.totalRegisteredPatterns === 0)
+                                return "Present calibration pattern and hold it completely still until it gets registered"
+                            return "Now keep registering more pattern poses by presenting and holding still"
                         }
+                        if (liveVideoModeRadioButton.checked && calibrationProcessor.readyToSaveCalibration)
+                        {
+                            output = "Present and hold calibration pattern until it gets registered"
+                        }
+                        if (imageFolderModeRadioButton.checked)
+                        {
+                            if (calibrationProcessor.readyToSaveCalibration)
+                            {
+                                output = "Ready to save calibration model"
+                            }
+                            else
+                            {
+                                output = calibrationProcessor.imageInputFolder.length > 0
+                                  ? calibrationProcessor.imageInputFolder
+                                  : "Select the folder with images to be processed..."
+                            }
+                        }
+                        return output
                     }
                 }
             }

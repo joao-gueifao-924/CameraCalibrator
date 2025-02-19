@@ -1,17 +1,23 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <Calibrationprocessor.h>
 
 int main(int argc, char *argv[])
 {
-    QGuiApplication app(argc, argv);
-    QQmlApplicationEngine engine;
-    QObject::connect(
-        &engine,
-        &QQmlApplicationEngine::objectCreationFailed,
-        &app,
-        []() { QCoreApplication::exit(-1); },
-        Qt::QueuedConnection);
-    engine.loadFromModule("CameraCalibrator", "Main");
+    int exitCode;
+    do {
+        QGuiApplication app(argc, argv);
+        QQmlApplicationEngine engine;
+        QObject::connect(
+            &engine,
+            &QQmlApplicationEngine::objectCreationFailed,
+            &app,
+            []() { QCoreApplication::exit(-1); },
+            Qt::QueuedConnection);
+        engine.loadFromModule("CameraCalibrator", "Main");
 
-    return app.exec();
+        exitCode = app.exec();
+    } while (exitCode == CalibrationProcessor::EXIT_CODE_RESTART);
+
+    return exitCode;
 }

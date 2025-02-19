@@ -30,15 +30,15 @@ public:
     std::string getPatternStatusString(pattern_status status) {
         switch (status) {
         case pattern_status::Undefined:
-            return "Pattern status undefined";
+            return "";
         case pattern_status::PatternNotConfigured:
             return "Pattern not configured";
         case pattern_status::PatternNotFound:
             return "Pattern not found";
         case pattern_status::PatternTooSimilar:
-            return "Pattern too similar";
+            return "Pattern pose too similar, change it";
         case pattern_status::PatternNotHeldLongEnough:
-            return "Pattern not held long enough";
+            return "Hold pattern still for registration";
         case pattern_status::PatternAccepted:
             return "Pattern accepted";
         default:
@@ -61,20 +61,8 @@ public:
     };
     Q_ENUM(fitting_status)
     std::string getFittingStatusString(fitting_status status) {
-        switch (status) {
-        case fitting_status::Undefined:
-            return "Fitting status undefined";
-        case fitting_status::NotEnoughRegisteredImages:
-            return "Insufficient images for calibration";
-        case fitting_status::SamePreviousModel:
-            return "Using previous calibration model";
-        case fitting_status::NewlyFittedCameraModel:
-            return "Newly fitted calibration model";
-        case fitting_status::FittingUnsuccessful:
-            return "Fitting unsuccessful";
-        default:
-            return "Unknown Status";
-        }
+        if (status == fitting_status::FittingUnsuccessful) return "Fitting error";
+        return "";
     }
     Q_INVOKABLE QString getFittingStatusQString(fitting_status status)
     {
@@ -94,6 +82,7 @@ public:
     Q_PROPERTY(bool readyToSaveCalibration READ readyToSaveCalibration NOTIFY readyToSaveCalibrationChanged);
 
 public:
+    static const int EXIT_CODE_RESTART = -857487349;
     static constexpr double DEFAULT_MAX_FRAME_RATE = 30.0;
     explicit CalibrationProcessor(QObject *parent = nullptr);
     ~CalibrationProcessor();
@@ -120,6 +109,7 @@ public:
     bool readyToSaveCalibration();
 
     Q_INVOKABLE bool saveCameraModelJson(QString filePath);
+    Q_INVOKABLE void restartApp();
 
 signals:
     void maxFrameRateChanged();

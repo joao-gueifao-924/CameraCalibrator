@@ -1,5 +1,6 @@
 // frameprocessor.cpp
 #include "Calibrationprocessor.h"
+#include <QGuiApplication>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
@@ -338,6 +339,11 @@ bool CalibrationProcessor::saveCameraModelJson(QString filePath)
     file << jsonString;
     file.close();
     return true;
+}
+
+void CalibrationProcessor::restartApp()
+{
+    QCoreApplication::instance()->exit(EXIT_CODE_RESTART);
 }
 
 CalibrationProcessor::pattern_status CalibrationProcessor::get_pattern_status()
