@@ -15,5 +15,7 @@ When calibration is finished, user can save the camera parameters into a JSON fi
 *   Visualization of detected corners on the video stream
 *   Calculation of camera intrinsics matrix and lens distortion coefficients
 
-## Still in progress
-Development of this program is still in progress.
+## Notes
+- Development of this program is still in progress.
+- Apart from Qt 6, you will also need QtMultimedia package installed. It is used for handling video camera feeds.
+- This is a CMAKE project, with the following dependencies: OpenCV 4.x, Boost 1.85+
